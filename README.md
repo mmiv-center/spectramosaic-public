@@ -17,7 +17,7 @@ To use this application, you need to have performed a number of preprocessing st
 Structural reference images need to, as of this version (1.9.2019) require 3 `.png` files for each plane (axial, coronal, sagittal) with the voxel drawn and baked into the image. In the visual tool we only show the axial image, but you can customize as you like. 
 
 ### Spectral graph 
-We use [Tarquin](http://tarquin.sourceforge.net/), an open-source spectral processing and quantification tool for pre-processing the spectral graph data. From Tarquin, export the CSV results and fits spreadsheets, and save these as `PXXXXX_results.csv` and `PXXXXX_fits.csv`, respectively. We include in `sample_data` directory some sample files to see how this should look. 
+We use [Tarquin](http://tarquin.sourceforge.net/), an open-source spectral processing and quantification tool for pre-processing the spectral graph data. From Tarquin, export the CSV results and fits spreadsheets, and save these as `PXXXXX_results.csv` and `PXXXXX_fits.csv`, respectively.  As an example structure we have a test data folder loaded that has already been prepared and includes all necessary files---see `giardiaFullMetab_spatial` or `giardiaFullMetab_diffTE` as reference datasets. Either of these can be dropped directly into the application interface in the drop zone (A in the figure above). You can load both sequentially. 
 
 ### Directory structure
 The python routine above will output this for you, but if you are rearranging or doing any of this on your own, you will need a project hierarchy setup with the following structure:
@@ -31,7 +31,7 @@ The python routine above will output this for you, but if you are rearranging or
             - `PXXXX1_mask_spectramosaic_sag.png`
     - ___header_info.csv
 
-NB: You will get a validation error if your structure is not set like this. As an example structure we have a test data folder loaded that has already done through the preparatory script - see `giardiaFullMetab_spatial` or `giardiaFullMetab_diffTE` as reference datasets. Either of these can be dropped directly into the application interface in the drop zone (A in the figure above). You can load both sequentially. 
+NB: You will get a validation error if your structure is not set like this.
 
 ### Workflow example
 SpectraMosaic consists of 2 main views: the left provides for spectral inspection and customized group creation while the right serves as the spectral analysis interface in the form of a heatmap matrix. 
