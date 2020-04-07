@@ -9,45 +9,15 @@ MRS is a non-invasive biochemical imaging technique utilized in clinical researc
 
 ## Using SpectraMosaic
 ### Upstream processing steps for analysis
-To use this application, you need to have performed a number of preprocessing steps with the initial spectral acquisition. This tool is downstream of the spectral voxel registration and model fitting steps. 
+To use this application, you need to have performed a number of preprocessing steps with the initial spectral acquisition. This tool is downstream of the spectral voxel registration and model fitting steps. At this time, we are unable to include the automatic processing steps necessary, but we are working on making this part of the pipeline publicly available. 
 
-In order to create the image and file structure necessary to be read into the tool, run spectramosaic_prep.py from the /scripts/spectramosaic_prep directory. This will create the following image, spectra, and structural settings that SpectraMosaic is looking for. This script has a number of python version and package dependencies and some software requirements, listed below:
-- python2 as the virtual environment for this tool (see below for how to set up a python venv if you are unsure) with these packages:
-    - pfile.py (included in /scripts/spectramosaic_prep directory)
-    - mergemasks.py (included in /scripts/spectramosaic_prep directory)
-    - nibabel
-    - numpy
-    - scipy
-    - Pillow
-    - opencv
-- You also need to have these 2 softwares installed on your machine:
-    - Matlab
-    - Tarquin 
-
-### Install python package dependencies into project directory:
-`$ pip install nibabel` 	install in your venv; this also brings in numpy\
-`$ pip install Pillow`\
-`$ pip install scipy`\
-`$ pip install opencv-python` (sometimes this won’t go until after you try running $ the prep script first, not sure why)\
-
-## Run spectramosaic_prep.py (example code here, if you are on a Mac)
-From your python virtual enviroment in the SpectraMosaic project directory, run the file. There are more detailed notes and instructions at the head of this script as well. This script is written to run with python2 and python3. 
-
-`$ python3 <path to script>/spectramosaic_prep.py -o <output folder path> <structural data path> <P file path>/P*7`
-
-Following these steps, you should have produced the files and directory structure needed by SpectraMosaic. Note that this script is known to be compatable with GE scanner software v26 and below. We cannot guarantee support beyond this version. Support for processing Siemens data is coming soon. 
 
 ## File and Directory Structure Requirements
 ### Structural image 
 Structural reference images need to, as of this version (1.9.2019) require 3 `.png` files for each plane (axial, coronal, sagittal) with the voxel drawn and baked into the image. In the visual tool we only show the axial image, but you can customize as you like. 
 
 ### Spectral graph 
-Spectral acquisition and model fit data should be in `.csv` format, organized into a varying number of colums columns:
-- column 1: ppm, x-axis coordinates
-- column 2: raw data output, y-axis coordinates
-- column 3: model fit, y-axis coordinates
-- column 4: baseline, y-axis coordinates
-- columns 5 - ... : basis set metabolites from Tarquin 
+We use [Tarquin](http://tarquin.sourceforge.net/), an open-source spectral processing and quantification tool for pre-processing the spectral graph data. From Tarquin, export the CSV results and fits spreadsheets, and save these as `PXXXXX_results.csv` and `PXXXXX_fits.csv`, respectively. We include in `sample_data` directory some sample files to see how this should look. 
 
 ### Directory structure
 The python routine above will output this for you, but if you are rearranging or doing any of this on your own, you will need a project hierarchy setup with the following structure:
@@ -60,7 +30,7 @@ The python routine above will output this for you, but if you are rearranging or
         - voxel_xxx
     - ___header_info.csv
 
-NB: You will get a validation error if your structure is not set like this. As an example structure we have a test data folder loaded that has already done through the preparatory script - see `giardiaFullMetab_spatial` or `giardiaFullMetab_diffTE` as reference datasets. Either of these can be dropped directly into the application interface. You can load both sequentially. 
+NB: You will get a validation error if your structure is not set like this. As an example structure we have a test data folder loaded that has already done through the preparatory script - see `giardiaFullMetab_spatial` or `giardiaFullMetab_diffTE` as reference datasets. Either of these can be dropped directly into the application interface in the drop zone (A in the figure above). You can load both sequentially. 
 
 ### Workflow example
 SpectraMosaic consists of 2 main views: the left provides for spectral inspection and customized group creation while the right serves as the spectral analysis interface in the form of a heatmap matrix. 
