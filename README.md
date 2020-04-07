@@ -23,11 +23,12 @@ We use [Tarquin](http://tarquin.sourceforge.net/), an open-source spectral proce
 The python routine above will output this for you, but if you are rearranging or doing any of this on your own, you will need a project hierarchy setup with the following structure:
 - root
     - patient_xxx
-        - voxel_xxx
-        - voxel_xxx
-    - patient_xxx
-        - voxel_xxx
-        - voxel_xxx
+        - PXXXX1
+            - `PXXXX1_fits.csv`
+            - `PXXXX1_results.csv`
+            - `PXXXX1_mask_spectramosaic_ax.png`
+            - `PXXXX1_mask_spectramosaic_cor.png`
+            - `PXXXX1_mask_spectramosaic_sag.png`
     - ___header_info.csv
 
 NB: You will get a validation error if your structure is not set like this. As an example structure we have a test data folder loaded that has already done through the preparatory script - see `giardiaFullMetab_spatial` or `giardiaFullMetab_diffTE` as reference datasets. Either of these can be dropped directly into the application interface in the drop zone (A in the figure above). You can load both sequentially. 
