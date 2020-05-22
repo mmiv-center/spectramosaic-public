@@ -1,0 +1,7 @@
+Voxel ID;Patient;State;Time;Gender;Age;TE;location
+P30000;X003;resting;29/08/2009;M;25;35;PROBE-SV 35 LEFT prefrontalt
+P30001;X003;resting;29/10/2009;M;25;35;PROBE-SV 35 LEFT Precuneus_pcc
+P30002;X003;resting;01/02/2010;M;25;35;PROBE-SV 35 RIGHT hippocamp-amygd
+P29184;X003;active;29/08/2009;M;25;35;PROBE-SV 35 LEFT prefrontalt
+P31232;X003;active;29/10/2009;M;25;35;PROBE-SV 35 LEFT Precuneus_pcc
+P32256;X003;active;01/02/2010;M;25;35;PROBE-SV 35 RIGHT hippocamp-amygd
