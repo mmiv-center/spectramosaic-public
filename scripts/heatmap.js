@@ -1,7 +1,7 @@
-var heatmap_limits = [6, -5]; // limits after which ratios won't be distinguished (will be the darkest color)
-var color_schemes = [d3.interpolateRdBu, d3.interpolateBrBG]; // used color schemes (d3 interpolation functions), first for positive ratios, second for negative ratios
+const heatmap_limits = [5, -5]; // limits after which ratios won't be distinguished (will be the darkest color)
+const color_schemes = [d3.interpolateRdBu, d3.interpolateBrBG]; // used color schemes (d3 interpolation functions), first for positive ratios, second for negative ratios
 var ids_to_highlight = []; // ids of voxels to be highlighted -- stored in a global variable to connect with the left panel easily
-var CRLB_WARNING_VAL = 15.0; // value of CRLB percent over which the warning is shown
+const CRLB_WARNING_VAL = 15.0; // value of CRLB percent over which the warning is shown
 
 let viewR = function(p) {
 
@@ -9,7 +9,7 @@ let viewR = function(p) {
         /*var w = (parseInt($("#grid_viewR").attr("data-sizex")) + 1) * gridster_api.options.widget_base_dimensions[0]; 
         var h = (parseInt($("#grid_viewR").attr("data-sizey")) + 1) * gridster_api.options.widget_base_dimensions[1]; */
         var w = parseInt($("#grid_viewR").attr("data-sizex")) * (($(".gridster").width() - gridster_api.options.widget_margins[0]) / 35 - 1);
-        var h = parseInt($("#grid_viewR").attr("data-sizey")) * (($(".gridster").height() - gridster_api.options.widget_margins[1]) / 17 - 1);
+        var h = parseInt($("#grid_viewR").attr("data-sizey")) * (($(".gridster").height() - gridster_api.options.widget_margins[1]) / 17 - 3);
         p.createCanvas(w, h);
 
         p.textAlign(p.CENTER, p.CENTER);
@@ -23,7 +23,8 @@ let viewR = function(p) {
         p.xMetabolites = []; // metabolites shown on X axis (array of strings, values will be taken from app.voxel_groups[i].metabolite_averages, see voxel_groups.js)
         p.yMetabolites = []; // metabolites shown on Y axis (array of strings, values will be taken from app.voxel_groups[i].metabolite_averages, see voxel_groups.js)
         p.xGroups = []; // groups shown on X axis (array of indexes)	
-        p.yGroups = []; // groups shown on Y axis (array of indexes)	
+        p.yGroups = []; // groups shown on Y axis (array of indexes)
+        p.ratioMatrix = []; // the ratios to be displayed	
 
         p.expanded_data = [];
 
@@ -55,7 +56,7 @@ let viewR = function(p) {
 
     p.resized = function() {
         var w = parseInt($("#grid_viewR").attr("data-sizex")) * (($(".gridster").width() - gridster_api.options.widget_margins[0]) / 35 - 1);
-        var h = parseInt($("#grid_viewR").attr("data-sizey")) * (($(".gridster").height() - gridster_api.options.widget_margins[1]) / 17 - 1);
+        var h = parseInt($("#grid_viewR").attr("data-sizey")) * (($(".gridster").height() - gridster_api.options.widget_margins[1]) / 17 - 3);
         p.resizeCanvas(w, h);
 
         // set up properties of the view
@@ -94,7 +95,8 @@ let viewR = function(p) {
             p.yScales.push(1);
         }
 
-        // p.countExpandedRatios();
+        p.countOverallRatios();
+        p.countExpandedRatios();
     }
 
     p.updateScene = function() {
@@ -134,12 +136,13 @@ let viewR = function(p) {
             p.drawYAxis();
             p.drawXValues();
             p.drawYValues();
-            p.drawTiles();
+            p.drawMatrix();
         }
 
         p.drawButtons();
         if (redraw_left) {
             p5_view_L.updateScene();
+            app.voxel_groups[ALL_VOXELS_GROUP].sortVoxels();
         }
     }
 
@@ -270,12 +273,14 @@ let viewR = function(p) {
             if (!p.yGroups.includes(group_idx)) p.yGroups.push(group_idx);
         }
 
+        p.countExpandedRatios();
+        p.countOverallRatios();
         p.resetView();
         p.updateScene();
     }
 
-    p.countExpandedRatios = function() {
-        if (p.xMetabolites.length == 0 && p.yMetabolites.length == 0) return;
+    p.countOverallRatios = function() {
+        p.ratioMatrix = [];
 
         var groups_to_collapse = [];
         for (var x of p.xGroups) {
@@ -286,289 +291,12 @@ let viewR = function(p) {
         }
 
         // get voxels from all groups together and sort them (see voxel_groups.js for function definition)
-        var all_selected_voxels = collapseAndSort(groups_to_collapse);
-
-        var metabolite_x = p.xMetabolites[p.tileExpanded.x];
-        var metabolite_y = p.yMetabolites[p.tileExpanded.y];
-
-        p.expanded_data = [];
-
-        for (var data_pos = 0; data_pos < all_selected_voxels.length;) {
-
-            // process locations
-
-            var voxel_x_avg = 0;
-            var voxel_y_avg = 0;
-            var voxel_data_len = 0;
-            var voxel_err_warn = false;
-            var patients_data = [];
-
-            while (data_pos < all_selected_voxels.length) {
-
-                // process patients
-
-                var patient_x_avg = 0;
-                var patient_y_avg = 0;
-                var patient_data_len = 0;
-                var patient_err_warn = false;
-                var states_data = [];
-
-                while (data_pos < all_selected_voxels.length) {
-
-                    // process states
-
-                    var state_x_avg = 0;
-                    var state_y_avg = 0;
-                    var state_data_len = 0;
-                    var state_err_warn = false;
-                    var timepoints_data = [];
-
-                    while (data_pos < all_selected_voxels.length) {
-
-                        // process timepoints
-
-                        var time_x_avg = 0;
-                        var time_y_avg = 0;
-                        var time_data_len = 0;
-                        var time_err_warn = false;
-
-                        while (data_pos < all_selected_voxels.length) {
-
-                            var amp_x = all_selected_voxels[data_pos].values_orig[metabolite_x + "_results"].concentration;
-                            var amp_y = all_selected_voxels[data_pos].values_orig[metabolite_y + "_results"].concentration;
-                            var err_warn = all_selected_voxels[data_pos].values_orig[metabolite_y + "_results"].CRLB_percent > CRLB_WARNING_VAL;
-
-                            time_x_avg += amp_x;
-                            state_x_avg += amp_x;
-                            patient_x_avg += amp_x;
-                            voxel_x_avg += amp_x;
-
-                            time_y_avg += amp_y;
-                            state_y_avg += amp_y;
-                            patient_y_avg += amp_y;
-                            voxel_y_avg += amp_y;
-
-                            time_err_warn = time_err_warn || err_warn;
-                            state_err_warn = state_err_warn || err_warn;
-                            patient_err_warn = patient_err_warn || err_warn;
-                            voxel_err_warn = voxel_err_warn || err_warn;
-
-                            time_data_len++;
-                            state_data_len++;
-                            patient_data_len++;
-                            voxel_data_len++;
-                            data_pos++;
-
-                            if (data_pos != 0) {
-                                if (data_pos == all_selected_voxels.length ||
-                                    all_selected_voxels[data_pos].time != all_selected_voxels[data_pos - 1].time ||
-                                    all_selected_voxels[data_pos].state != all_selected_voxels[data_pos - 1].state ||
-                                    all_selected_voxels[data_pos].patient != all_selected_voxels[data_pos - 1].patient ||
-                                    all_selected_voxels[data_pos].vox_location != all_selected_voxels[data_pos - 1].vox_location) { // all data for this timepoint processed
-
-                                    time_x_avg /= time_data_len;
-                                    time_y_avg /= time_data_len;
-
-                                    var rat, true_rat;
-
-                                    true_rat = time_x_avg / time_y_avg;
-
-                                    // detect whether the ratio would have a negative sign
-                                    var neg = (time_x_avg < 0 && time_y_avg > 0) || (time_x_avg > 0 && time_y_avg < 0);
-
-                                    // count as a positive ratio (needed because of the symmetric transformation)
-                                    time_x_avg = p.abs(time_x_avg);
-                                    time_y_avg = p.abs(time_y_avg);
-
-                                    if (time_x_avg > time_y_avg) {
-                                        rat = time_x_avg / time_y_avg;
-                                        rat -= 1;
-                                    } else {
-                                        rat = -time_y_avg / time_x_avg;
-                                        rat += 1;
-                                    }
-
-                                    timepoints_data.push({
-                                        time: all_selected_voxels[data_pos - 1].time,
-                                        echotime: all_selected_voxels[data_pos - 1].echotime,
-                                        voxel_id: all_selected_voxels[data_pos - 1].vox_id,
-                                        ratio: rat,
-                                        negative: neg,
-                                        true_ratio: true_rat,
-                                        error_warning: time_err_warn
-                                    });
-
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (data_pos != 0) {
-                            if (data_pos == all_selected_voxels.length ||
-                                all_selected_voxels[data_pos].state != all_selected_voxels[data_pos - 1].state ||
-                                all_selected_voxels[data_pos].patient != all_selected_voxels[data_pos - 1].patient ||
-                                all_selected_voxels[data_pos].vox_location != all_selected_voxels[data_pos - 1].vox_location) { // all data for this state processed
-
-                                state_x_avg /= state_data_len;
-                                state_y_avg /= state_data_len;
-
-                                var rat, true_rat;
-
-                                true_rat = state_x_avg / state_y_avg;
-
-                                // detect whether the ratio would have a negative sign
-                                var neg = (state_x_avg < 0 && state_y_avg > 0) || (state_x_avg > 0 && state_y_avg < 0);
-
-                                // count as a positive ratio (needed because of the symmetric transformation)
-                                state_x_avg = p.abs(state_x_avg);
-                                state_y_avg = p.abs(state_y_avg);
-
-                                if (state_x_avg > state_y_avg) {
-                                    rat = state_x_avg / state_y_avg;
-                                    rat -= 1;
-                                } else {
-                                    rat = -state_y_avg / state_x_avg;
-                                    rat += 1;
-                                }
-
-                                states_data.push({
-                                    state: all_selected_voxels[data_pos - 1].state,
-                                    ratio: rat,
-                                    negative: neg,
-                                    true_ratio: true_rat,
-                                    error_warning: state_err_warn,
-                                    timepoints: timepoints_data
-                                });
-
-                                break;
-                            }
-                        }
-                    }
-
-                    if (data_pos != 0) {
-                        if (data_pos == all_selected_voxels.length ||
-                            all_selected_voxels[data_pos].patient != all_selected_voxels[data_pos - 1].patient ||
-                            all_selected_voxels[data_pos].vox_location != all_selected_voxels[data_pos - 1].vox_location) { // all data for this patient processed
-
-                            patient_x_avg /= patient_data_len;
-                            patient_y_avg /= patient_data_len;
-
-                            var rat, true_rat;
-
-                            true_rat = patient_x_avg / patient_y_avg;
-
-                            // detect whether the ratio would have a negative sign
-                            var neg = (patient_x_avg < 0 && patient_y_avg > 0) || (patient_x_avg > 0 && patient_y_avg < 0);
-
-                            // count as a positive ratio (needed because of the symmetric transformation)
-                            patient_x_avg = p.abs(patient_x_avg);
-                            patient_y_avg = p.abs(patient_y_avg);
-
-                            if (patient_x_avg > patient_y_avg) {
-                                rat = patient_x_avg / patient_y_avg;
-                                rat -= 1;
-                            } else {
-                                rat = -patient_y_avg / patient_x_avg;
-                                rat += 1;
-                            }
-
-
-                            patients_data.push({
-                                patient: all_selected_voxels[data_pos - 1].patient,
-                                gender: all_selected_voxels[data_pos - 1].gender,
-                                age: all_selected_voxels[data_pos - 1].age,
-                                ratio: rat,
-                                negative: neg,
-                                true_ratio: true_rat,
-                                error_warning: patient_err_warn,
-                                states: states_data
-                            });
-
-                            break;
-                        }
-                    }
-                }
-
-                if (data_pos != 0) {
-                    if (data_pos == all_selected_voxels.length || all_selected_voxels[data_pos].vox_location != all_selected_voxels[data_pos - 1].vox_location) { // all data for this voxel processed
-
-                        voxel_x_avg /= voxel_data_len;
-                        voxel_y_avg /= voxel_data_len;
-
-                        var rat, true_rat;
-
-                        true_rat = voxel_x_avg / voxel_y_avg;
-
-                        // detect whether the ratio would have a negative sign
-                        var neg = (voxel_x_avg < 0 && voxel_y_avg > 0) || (voxel_x_avg > 0 && voxel_y_avg < 0);
-
-                        // count as a positive ratio (needed because of the symmetric transformation)
-                        voxel_x_avg = p.abs(voxel_x_avg);
-                        voxel_y_avg = p.abs(voxel_y_avg);
-
-                        if (voxel_x_avg > voxel_y_avg) {
-                            rat = voxel_x_avg / voxel_y_avg;
-                            rat -= 1;
-                        } else {
-                            rat = -voxel_y_avg / voxel_x_avg;
-                            rat += 1;
-                        }
-
-
-                        p.expanded_data.push({
-                            voxel: all_selected_voxels[data_pos - 1].vox_location,
-                            ratio: rat,
-                            negative: neg,
-                            true_ratio: true_rat,
-                            error_warning: voxel_err_warn,
-                            patients: patients_data
-                        });
-
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    //	IMPORTANT: X and Y axis have to be drawn before the tiles and data values - positions of ticks would not be updated otherwise
-
-    p.drawTooltipRatio = function(rat, warning) {
-        var mouseText = rat.toFixed(4);
-        var wid = p.textWidth(mouseText);
-        p.fill(255);
-        p.noStroke();
-        p.rect(p.mouseX + 3, p.mouseY - 18, p.mouseX + 7 + wid, p.mouseY - 5);
-        if (!warning) p.fill(0);
-        else p.fill(255, 0, 0);
-        p.textSize(12);
-        p.textAlign(p.LEFT, p.CENTER);
-        p.text(mouseText, p.mouseX + 5, p.mouseY - 10);
-        p.textAlign(p.CENTER, p.CENTER);
-    }
-
-    p.drawTiles = function() {
-        p.noStroke();
-        p.rectMode(p.CORNERS);
-
-        var tile_fill_color;
-
-        // set highlighting to false
-        selected_voxels.forEach(function(elem) {
-            elem.highlighted = false;
-        });
-
-        var mouse_over_tile = false,
-            mouse_over_expanded_tile = false;
-        var tooltip_ratio, tooltip_warning;
+        selected_voxels = collapseAndSort(groups_to_collapse);
 
         for (var x = 0; x < p.xMetabolites.length; x++) {
+            p.ratioMatrix.push([]);
+
             for (var y = 0; y < p.yMetabolites.length; y++) {
-                //	get coordinates of the tile
-                var x_from = p.trueTicksPos.x[x];
-                var x_to = p.trueTicksPos.x[x + 1];
-                var y_from = p.trueTicksPos.y[y + 1];
-                var y_to = p.trueTicksPos.y[y];
 
                 //	get the ratio between X and Y metabolite concentrations (average of all data on each axis)
                 var rat;
@@ -608,9 +336,308 @@ let viewR = function(p) {
                     rat += 1;
                 }
 
+                p.ratioMatrix[x].push({
+                    true_ratio: true_ratio,
+                    sym_ratio: rat,
+                    negative: negative,
+                    error_warning: error_warning
+                });
+            }
+        }
+    }
+
+    p.countExpandedRatios = function() {
+        if (p.xMetabolites.length == 0 || p.yMetabolites.length == 0) return;
+        if (p.tileExpanded.x == -1 || p.tileExpanded.y == -1) return;
+
+        // get voxels from all groups together and sort them (see voxel_groups.js for function definition)
+        // /*all_*/selected_voxels = collapseAndSort(groups_to_collapse);
+
+        var metabolite_x = p.xMetabolites[p.tileExpanded.x];
+        var metabolite_y = p.yMetabolites[p.tileExpanded.y];
+
+        p.expanded_data = [];
+
+        for (var data_pos = 0; data_pos < /*all_*/selected_voxels.length;) {
+
+            // process locations
+
+            var voxel_x_avg = 0;
+            var voxel_y_avg = 0;
+            var voxel_data_len = 0;
+            var voxel_err_warn = false;
+            var patients_data = [];
+
+            while (data_pos < /*all_*/selected_voxels.length) {
+
+                // process patients
+
+                var patient_x_avg = 0;
+                var patient_y_avg = 0;
+                var patient_data_len = 0;
+                var patient_err_warn = false;
+                var states_data = [];
+
+                while (data_pos < /*all_*/selected_voxels.length) {
+
+                    // process states
+
+                    var state_x_avg = 0;
+                    var state_y_avg = 0;
+                    var state_data_len = 0;
+                    var state_err_warn = false;
+                    var timepoints_data = [];
+
+                    while (data_pos < /*all_*/selected_voxels.length) {
+
+                        // process timepoints
+
+                        var time_x_avg = 0;
+                        var time_y_avg = 0;
+                        var time_data_len = 0;
+                        var time_err_warn = false;
+
+                        while (data_pos < /*all_*/selected_voxels.length) {
+
+                            var amp_x = /*all_*/selected_voxels[data_pos].values_orig[metabolite_x + "_results"].concentration;
+                            var amp_y = /*all_*/selected_voxels[data_pos].values_orig[metabolite_y + "_results"].concentration;
+                            var err_warn = /*all_*/selected_voxels[data_pos].values_orig[metabolite_y + "_results"].CRLB_percent > CRLB_WARNING_VAL;
+
+                            time_x_avg += amp_x;
+                            state_x_avg += amp_x;
+                            patient_x_avg += amp_x;
+                            voxel_x_avg += amp_x;
+
+                            time_y_avg += amp_y;
+                            state_y_avg += amp_y;
+                            patient_y_avg += amp_y;
+                            voxel_y_avg += amp_y;
+
+                            time_err_warn = time_err_warn || err_warn;
+                            state_err_warn = state_err_warn || err_warn;
+                            patient_err_warn = patient_err_warn || err_warn;
+                            voxel_err_warn = voxel_err_warn || err_warn;
+
+                            time_data_len++;
+                            state_data_len++;
+                            patient_data_len++;
+                            voxel_data_len++;
+                            data_pos++;
+
+                            if (data_pos != 0) {
+                                if (data_pos == /*all_*/selected_voxels.length ||
+                                    /*all_*/selected_voxels[data_pos].time != /*all_*/selected_voxels[data_pos - 1].time ||
+                                    /*all_*/selected_voxels[data_pos].state != /*all_*/selected_voxels[data_pos - 1].state ||
+                                    /*all_*/selected_voxels[data_pos].patient != /*all_*/selected_voxels[data_pos - 1].patient ||
+                                    /*all_*/selected_voxels[data_pos].vox_location != /*all_*/selected_voxels[data_pos - 1].vox_location) { // all data for this timepoint processed
+
+                                    time_x_avg /= time_data_len;
+                                    time_y_avg /= time_data_len;
+
+                                    var rat, true_rat;
+
+                                    true_rat = time_x_avg / time_y_avg;
+
+                                    // detect whether the ratio would have a negative sign
+                                    var neg = (time_x_avg < 0 && time_y_avg > 0) || (time_x_avg > 0 && time_y_avg < 0);
+
+                                    // count as a positive ratio (needed because of the symmetric transformation)
+                                    time_x_avg = p.abs(time_x_avg);
+                                    time_y_avg = p.abs(time_y_avg);
+
+                                    if (time_x_avg > time_y_avg) {
+                                        rat = time_x_avg / time_y_avg;
+                                        rat -= 1;
+                                    } else {
+                                        rat = -time_y_avg / time_x_avg;
+                                        rat += 1;
+                                    }
+
+                                    timepoints_data.push({
+                                        time: /*all_*/selected_voxels[data_pos - 1].time,
+                                        echotime: /*all_*/selected_voxels[data_pos - 1].echotime,
+                                        voxel_id: /*all_*/selected_voxels[data_pos - 1].vox_id,
+                                        ratio: rat,
+                                        negative: neg,
+                                        true_ratio: true_rat,
+                                        error_warning: time_err_warn
+                                    });
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (data_pos != 0) {
+                            if (data_pos == /*all_*/selected_voxels.length ||
+                                /*all_*/selected_voxels[data_pos].state != /*all_*/selected_voxels[data_pos - 1].state ||
+                                /*all_*/selected_voxels[data_pos].patient != /*all_*/selected_voxels[data_pos - 1].patient ||
+                                /*all_*/selected_voxels[data_pos].vox_location != /*all_*/selected_voxels[data_pos - 1].vox_location) { // all data for this state processed
+
+                                state_x_avg /= state_data_len;
+                                state_y_avg /= state_data_len;
+
+                                var rat, true_rat;
+
+                                true_rat = state_x_avg / state_y_avg;
+
+                                // detect whether the ratio would have a negative sign
+                                var neg = (state_x_avg < 0 && state_y_avg > 0) || (state_x_avg > 0 && state_y_avg < 0);
+
+                                // count as a positive ratio (needed because of the symmetric transformation)
+                                state_x_avg = p.abs(state_x_avg);
+                                state_y_avg = p.abs(state_y_avg);
+
+                                if (state_x_avg > state_y_avg) {
+                                    rat = state_x_avg / state_y_avg;
+                                    rat -= 1;
+                                } else {
+                                    rat = -state_y_avg / state_x_avg;
+                                    rat += 1;
+                                }
+
+                                states_data.push({
+                                    state: /*all_*/selected_voxels[data_pos - 1].state,
+                                    ratio: rat,
+                                    negative: neg,
+                                    true_ratio: true_rat,
+                                    error_warning: state_err_warn,
+                                    timepoints: timepoints_data
+                                });
+
+                                break;
+                            }
+                        }
+                    }
+
+                    if (data_pos != 0) {
+                        if (data_pos == /*all_*/selected_voxels.length ||
+                            /*all_*/selected_voxels[data_pos].patient != /*all_*/selected_voxels[data_pos - 1].patient ||
+                            /*all_*/selected_voxels[data_pos].vox_location != /*all_*/selected_voxels[data_pos - 1].vox_location) { // all data for this patient processed
+
+                            patient_x_avg /= patient_data_len;
+                            patient_y_avg /= patient_data_len;
+
+                            var rat, true_rat;
+
+                            true_rat = patient_x_avg / patient_y_avg;
+
+                            // detect whether the ratio would have a negative sign
+                            var neg = (patient_x_avg < 0 && patient_y_avg > 0) || (patient_x_avg > 0 && patient_y_avg < 0);
+
+                            // count as a positive ratio (needed because of the symmetric transformation)
+                            patient_x_avg = p.abs(patient_x_avg);
+                            patient_y_avg = p.abs(patient_y_avg);
+
+                            if (patient_x_avg > patient_y_avg) {
+                                rat = patient_x_avg / patient_y_avg;
+                                rat -= 1;
+                            } else {
+                                rat = -patient_y_avg / patient_x_avg;
+                                rat += 1;
+                            }
+
+
+                            patients_data.push({
+                                patient: /*all_*/selected_voxels[data_pos - 1].patient,
+                                gender: /*all_*/selected_voxels[data_pos - 1].gender,
+                                age: /*all_*/selected_voxels[data_pos - 1].age,
+                                ratio: rat,
+                                negative: neg,
+                                true_ratio: true_rat,
+                                error_warning: patient_err_warn,
+                                states: states_data
+                            });
+
+                            break;
+                        }
+                    }
+                }
+
+                if (data_pos != 0) {
+                    if (data_pos == /*all_*/selected_voxels.length || /*all_*/selected_voxels[data_pos].vox_location != /*all_*/selected_voxels[data_pos - 1].vox_location) { // all data for this voxel processed
+
+                        voxel_x_avg /= voxel_data_len;
+                        voxel_y_avg /= voxel_data_len;
+
+                        var rat, true_rat;
+
+                        true_rat = voxel_x_avg / voxel_y_avg;
+
+                        // detect whether the ratio would have a negative sign
+                        var neg = (voxel_x_avg < 0 && voxel_y_avg > 0) || (voxel_x_avg > 0 && voxel_y_avg < 0);
+
+                        // count as a positive ratio (needed because of the symmetric transformation)
+                        voxel_x_avg = p.abs(voxel_x_avg);
+                        voxel_y_avg = p.abs(voxel_y_avg);
+
+                        if (voxel_x_avg > voxel_y_avg) {
+                            rat = voxel_x_avg / voxel_y_avg;
+                            rat -= 1;
+                        } else {
+                            rat = -voxel_y_avg / voxel_x_avg;
+                            rat += 1;
+                        }
+
+
+                        p.expanded_data.push({
+                            voxel: /*all_*/selected_voxels[data_pos - 1].vox_location,
+                            ratio: rat,
+                            negative: neg,
+                            true_ratio: true_rat,
+                            error_warning: voxel_err_warn,
+                            patients: patients_data
+                        });
+
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    //	IMPORTANT: X and Y axis have to be drawn before the matrix and data values - positions of ticks would not be updated otherwise
+
+    p.drawTooltipRatio = function(rat, warning) {
+        p.textSize(12);
+        var mouseText = rat.toFixed(4);
+        var wid = p.textWidth(mouseText);
+        p.fill(255);
+        p.noStroke();
+        p.rect(p.mouseX + 3, p.mouseY - 18, p.mouseX + 13 + wid, p.mouseY - 5);
+        if (!warning) p.fill(0);
+        else p.fill(255, 0, 0);
+        p.textAlign(p.LEFT, p.CENTER);
+        p.text(mouseText, p.mouseX + 5, p.mouseY - 10);
+        p.textAlign(p.CENTER, p.CENTER);
+    }
+
+    p.drawMatrix = function() {
+        p.noStroke();
+        p.rectMode(p.CORNERS);
+
+        var cell_fill_color;
+
+        // set highlighting to false
+        selected_voxels.forEach(function(elem) {
+            elem.highlighted = false;
+        });
+
+        var mouse_over_cell = false,
+            mouse_over_expanded_cell = false;
+        var tooltip_ratio, tooltip_warning;
+
+        for (var x = 0; x < p.xMetabolites.length; x++) {
+            for (var y = 0; y < p.yMetabolites.length; y++) {
+                //	get coordinates of the tile
+                var x_from = p.trueTicksPos.x[x];
+                var x_to = p.trueTicksPos.x[x + 1];
+                var y_from = p.trueTicksPos.y[y + 1];
+                var y_to = p.trueTicksPos.y[y];
+                
                 // 	map ratio to color
-                var col = p.getHeatColor(rat, negative);
-                if (x == p.tileExpanded.x && y == p.tileExpanded.y) tile_fill_color = col;
+                var col = p.getHeatColor(p.ratioMatrix[x][y].sym_ratio, p.ratioMatrix[x][y].negative);
+                if (x == p.tileExpanded.x && y == p.tileExpanded.y) cell_fill_color = col;
 
                 // 	draw the rectangle
                 p.fill(col);
@@ -622,23 +649,21 @@ let viewR = function(p) {
                 if (p.mouseX > p.margin.left + x_from && p.mouseX < p.margin.left + x_to &&
                     p.mouseY > p.height - p.margin.bottom - y_from && p.mouseY < p.height - p.margin.bottom - y_to) {
 
+                    // if the cell is expanded, handle tooltip while drawing details
                     if (x == p.tileExpanded.x && y == p.tileExpanded.y) {
-                        mouse_over_expanded_tile = true;
+                        mouse_over_expanded_cell = true;
                         continue;
                     }
 
-                    mouse_over_tile = true;
-                    tooltip_ratio = true_ratio;
-                    tooltip_warning = error_warning;
-
-                    // if tile is expanded, handle tooltip while drawing details
-
+                    mouse_over_cell = true;
+                    tooltip_ratio = p.ratioMatrix[x][y].true_ratio;
+                    tooltip_warning = p.ratioMatrix[x][y].error_warning;
                 }
             }
 
             // 	show ratio as tooltip				
 
-            if (mouse_over_tile) p.drawTooltipRatio(tooltip_ratio, tooltip_warning);
+            if (mouse_over_cell) p.drawTooltipRatio(tooltip_ratio, tooltip_warning);
         }
 
         p.noFill();
@@ -646,22 +671,20 @@ let viewR = function(p) {
 
         p.rect(p.margin.left, p.height - p.margin.bottom - p.trueTicksPos.y[p.yMetabolites.length], p.margin.left + p.trueTicksPos.x[p.xMetabolites.length], p.height - p.margin.bottom);
 
-        p.drawExpandedDetails(tile_fill_color, mouse_over_expanded_tile);
+        p.drawExpandedDetails(cell_fill_color, mouse_over_expanded_cell);
     }
 
-    p.drawExpandedDetails = function(tile_fill_color, mouse_over_tile) {
+    p.drawExpandedDetails = function(cell_fill_color, mouse_over_cell) {
         if (p.tileExpanded.x == -1 || p.tileExpanded.y == -1) return;
 
 
-        //	get coordinates of the tile
+        //	get coordinates of the cell
         var x_from = p.trueTicksPos.x[p.tileExpanded.x];
         var x_to = p.trueTicksPos.x[p.tileExpanded.x + 1];
         var y_from = p.trueTicksPos.y[p.tileExpanded.y + 1];
         var y_to = p.trueTicksPos.y[p.tileExpanded.y];
 
-        p.countExpandedRatios();
-
-        // store all possible ids to highlight if mouse is in the expanded tile -> filter later
+        // store all possible ids to highlight if mouse is in the expanded cell -> filter later
         if (p.mouseX > p.margin.left + x_from && p.mouseX < p.margin.left + x_to &&
             p.mouseY > p.height - p.margin.bottom - y_from && p.mouseY < p.height - p.margin.bottom - y_to) {
 
@@ -685,15 +708,21 @@ let viewR = function(p) {
 
         var tooltip_rat = -1, tooltip_error = false;
 
-        if (p.expanded_data.length == 1 && p.expanded_data[0].patients.length == 1) { // 1 patient 1 voxel
+		// branch accroding to the encoding scenarios
+
+        if (p.expanded_data.length == 1 && p.expanded_data[0].patients.length == 1) {
+
+			// single location, single patient
             if (hasTimepoints) {
                 if (p.expanded_data[0].patients[0].states.length > 1) {
+
+					// single location, single patient, dual state, multiple timepoints
 
                     var fill_color_top = p.getHeatColor(p.expanded_data[0].patients[0].states[0].ratio, p.expanded_data[0].patients[0].states[0].negative);
                     var fill_color_bottom = p.getHeatColor(p.expanded_data[0].patients[0].states[1].ratio, p.expanded_data[0].patients[0].states[1].negative);
 
                     p.fill(fill_color_top);
-                    if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                    if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                     else p.stroke(255);
 
                     p.rect(p.margin.left + x_from + 5,
@@ -753,10 +782,12 @@ let viewR = function(p) {
 
                 } else {
 
+                    // single location, single patient, single state, multiple timepoints
+                    
                     var fill_color = p.getHeatColor(p.expanded_data[0].patients[0].ratio, p.expanded_data[0].patients[0].negative);
 
                     p.fill(fill_color);
-                    if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                    if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                     else p.stroke(255);
 
                     p.rect(p.margin.left + x_from + 5,
@@ -790,7 +821,9 @@ let viewR = function(p) {
                     }
                 }
             } else {
-
+				
+                // single location, single patient, dual state, one timepoint
+                
                 var circleDiam = p.min(x_to - x_from - 10, y_from - y_to - 10);
 
                 if (p.expanded_data[0].patients[0].states.length > 1) {
@@ -799,7 +832,7 @@ let viewR = function(p) {
                     var fill_color_bottom = p.getHeatColor(p.expanded_data[0].patients[0].states[1].ratio, p.expanded_data[0].patients[0].states[1].negative);
 
                     p.fill(fill_color_top);
-                    if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                    if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                     else p.stroke(255);
 
                     p.arc(p.margin.left + (x_from + x_to) / 2,
@@ -840,17 +873,51 @@ let viewR = function(p) {
                     }
 
                 } else { // 1 pt 1 voxel 1 state 1 timepoint -> don't draw the circle, don't highlight anything
-                    //ids_to_highlight = [];
-                    //return;
+                
                 }
             }
-        } else if (p.expanded_data.length == 1 && p.expanded_data[0].patients.length > 1) { // multiple patients 1 voxel
-            var circleDiam = Math.min((y_from - y_to) / p.expanded_data[0].patients.length, (x_to - x_from) * 2 / 3);
+        } else if (p.expanded_data.length == 1 && p.expanded_data[0].patients.length > 1) { 
+			
+            // single location, multiple patients
+
+            // determine the maximum possible diameter of a circle that would fit inside, round it to the nearest lower integer
+            var max_diam = Math.floor(Math.sqrt((x_to - x_from) * 2 / 3 * (y_from - y_to) / p.expanded_data[0].patients.length));
+
+            // find the optimal placement
+            var col_size = Math.floor((y_from - y_to) / max_diam);            // possible number of elements in a col
+            var row_size = Math.floor(((x_to - x_from) * 2 / 3) / max_diam);  // possible number of elements in a row
+
+            var rows = Math.ceil(p.expanded_data[0].patients.length / row_size);
+            var row_height = Math.floor((y_from - y_to - 10) / rows);
+
+            var cols = Math.ceil(p.expanded_data[0].patients.length / col_size); // number of cols needed
+            var col_width = Math.floor(((x_to - x_from) * 2 / 3) / cols); // width of a col
+
+            var circleDiam_row = Math.min(row_height, ((x_to - x_from) * 2 / 3) / (Math.min(p.expanded_data[0].patients.length, row_size)));
+            var circleDiam_col = Math.min((y_from - y_to - 10) / (Math.min(p.expanded_data[0].patients.length, col_size)), (col_width - 5));
+            
+            var circleDiam, circleDiam2;
+
+            if (circleDiam_row > circleDiam_col) {
+                col_size = Math.floor((y_from - y_to) / circleDiam_row); 
+                cols = Math.ceil(p.expanded_data[0].patients.length / col_size);
+                col_width = Math.floor(((x_to - x_from) * 2 / 3) / cols);
+                circleDiam = Math.min((y_from - y_to - 10) / (Math.min(p.expanded_data[0].patients.length, col_size)), (col_width - 5));
+                circleDiam2 = Math.min((y_from - y_to) / (Math.min(p.expanded_data[0].patients.length, col_size)), (col_width - 5));
+            } else {
+                circleDiam = circleDiam_col;
+                circleDiam2 = Math.min((y_from - y_to) / (Math.min(p.expanded_data[0].patients.length, col_size)), (col_width - 5));
+            }
+
+            var corner_diam = 50 / Math.max(2, Math.min(p.expanded_data[0].patients.length, col_size)); // how rounded the square should be
+
+            
+            //var circleDiam = Math.min((y_from - y_to) / p.expanded_data[0].patients.length, (x_to - x_from) * 2 / 3);
 
             var fill_color_voxel = p.getHeatColor(p.expanded_data[0].ratio, p.expanded_data[0].negative);
 
             p.fill(fill_color_voxel);
-            if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+            if (p.brightness(cell_fill_color) > 80) p.stroke(0);
             else p.stroke(255);
 
             p.rect(p.margin.left + (x_from * 5 + x_to) / 6,
@@ -875,7 +942,14 @@ let viewR = function(p) {
 
             if (hasTimepoints) {
                 for (var pt = 0; pt < p.expanded_data[0].patients.length; pt++) {
+                    
+                    var current_col = Math.floor(pt / col_size);
+                    var circleMid_x = p.margin.left + x_from + (x_to - x_from) * 1/6 + col_width * (current_col + 0.5);
+                    var y_offset = Math.floor(((y_from - y_to) - (circleDiam2 * Math.min(p.expanded_data[0].patients.length - current_col * col_size, col_size))) / 2);
+
                     if (p.expanded_data[0].patients[pt].states.length > 1) {
+						
+						// single location, multiple patients, dual state, multiple timepoints
 
                         var fill_color_top = p.getHeatColor(p.expanded_data[0].patients[pt].states[0].ratio, p.expanded_data[0].patients[pt].states[0].negative);
                         var fill_color_bottom = p.getHeatColor(p.expanded_data[0].patients[pt].states[1].ratio, p.expanded_data[0].patients[pt].states[1].negative);
@@ -884,10 +958,15 @@ let viewR = function(p) {
                         if (p.brightness(fill_color_voxel) > 80) p.stroke(0);
                         else p.stroke(255);
 
-                        var rect_x1 = p.margin.left + (x_from + x_to) / 2 - circleDiam / 2;
+                        var rect_x1 = circleMid_x - circleDiam2 / 2;
+                        var rect_x2 = circleMid_x + circleDiam2 / 2;
+                        var rect_y1 = p.height - p.margin.bottom - y_from + (pt % col_size) * circleDiam2 + y_offset;
+                        var rect_y2 = p.height - p.margin.bottom - y_from + (pt % col_size + 1) * circleDiam2 + y_offset;
+
+                        /*var rect_x1 = p.margin.left + (x_from + x_to) / 2 - circleDiam / 2;
                         var rect_x2 = p.margin.left + (x_from + x_to) / 2 + circleDiam / 2;
                         var rect_y1 = p.height - p.margin.bottom - y_from + pt * circleDiam;
-                        var rect_y2 = p.height - p.margin.bottom - y_from + (pt + 1) * circleDiam;
+                        var rect_y2 = p.height - p.margin.bottom - y_from + (pt + 1) * circleDiam;*/
 
                         p.rect(rect_x1,
                             rect_y1,
@@ -932,7 +1011,7 @@ let viewR = function(p) {
                                 return id.startsWith(ref_id);
                             });
                         } else if (p.mouseX > rect_x1 && p.mouseX < rect_x2 &&
-                            p.mouseY > (rect_y1 + rect_y2) / 2 && p.mouseY < rect_y1) {
+                                    p.mouseY > (rect_y1 + rect_y2) / 2 && p.mouseY < rect_y2) {
 
                             tooltip_rat = p.expanded_data[0].patients[pt].states[1].true_ratio;
                             tooltip_error = p.expanded_data[0].patients[pt].states[1].error_warning;
@@ -945,16 +1024,18 @@ let viewR = function(p) {
 
                     } else {
 
+						// single location, multiple patients, single state, multiple timepoints
+
                         var fill_color = p.getHeatColor(p.expanded_data[0].patients[pt].ratio, p.expanded_data[0].patients[pt].negative);
 
                         p.fill(fill_color);
                         if (p.brightness(fill_color_voxel) > 80) p.stroke(0);
                         else p.stroke(255);
 
-                        var rect_x1 = p.margin.left + (x_from + x_to) / 2 - circleDiam / 2;
-                        var rect_x2 = p.margin.left + (x_from + x_to) / 2 + circleDiam / 2;
-                        var rect_y1 = p.height - p.margin.bottom - y_from + pt * circleDiam;
-                        var rect_y2 = p.height - p.margin.bottom - y_from + (pt + 1) * circleDiam;
+                        var rect_x1 = circleMid_x - circleDiam2 / 2;
+                        var rect_x2 = circleMid_x + circleDiam2 / 2;
+                        var rect_y1 = p.height - p.margin.bottom - y_from + (pt % col_size) * circleDiam2 + y_offset;
+                        var rect_y2 = p.height - p.margin.bottom - y_from + (pt % col_size + 1) * circleDiam2 + y_offset;
 
                         p.rect(rect_x1,
                             rect_y1,
@@ -988,7 +1069,14 @@ let viewR = function(p) {
                 }
             } else {
                 for (var pt = 0; pt < p.expanded_data[0].patients.length; pt++) {
+
+                    var current_col = Math.floor(pt / col_size);
+                    var circleMid_x = p.margin.left + x_from + (x_to - x_from) * 1/6 + col_width * (current_col + 0.5);
+                    var y_offset = Math.floor(((y_from - y_to) - (circleDiam2 * Math.min(p.expanded_data[0].patients.length - current_col * col_size, col_size))) / 2);
+
                     if (p.expanded_data[0].patients[pt].states.length > 1) {
+					
+						// single location, multiple patients, dual state, one timepoint
 
                         var fill_color_top = p.getHeatColor(p.expanded_data[0].patients[pt].states[0].ratio, p.expanded_data[0].patients[pt].states[0].negative);
                         var fill_color_bottom = p.getHeatColor(p.expanded_data[0].patients[pt].states[1].ratio, p.expanded_data[0].patients[pt].states[1].negative);
@@ -997,24 +1085,24 @@ let viewR = function(p) {
                         if (p.brightness(fill_color_voxel) > 80) p.stroke(0);
                         else p.stroke(255);
 
-                        var circleCenter_y = p.height - p.margin.bottom - y_from + (pt + 0.5) * circleDiam;
+                        var circleMid_y = p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2 + y_offset;
 
-                        p.arc(p.margin.left + (x_from + x_to) / 2,
-                            circleCenter_y,
+                         p.arc(circleMid_x,
+                            circleMid_y,
                             circleDiam, circleDiam,
                             p.PI, 0, p.CHORD);
 
                         p.fill(fill_color_bottom);
 
-                        p.arc(p.margin.left + (x_from + x_to) / 2,
-                            circleCenter_y,
+                        p.arc(circleMid_x,
+                            circleMid_y,
                             circleDiam, circleDiam,
                             0, p.PI, p.CHORD);
 
                         // check for mouse 
 
-                        if (p.dist(p.mouseX, p.mouseY, p.margin.left + (x_from + x_to) / 2, circleCenter_y) < circleDiam / 2 &&
-                            p.mouseY < p.height - p.margin.bottom - (y_from + y_to) / 2) {
+                        if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam / 2 &&
+                            p.mouseY < circleMid_y) {
 
                             tooltip_rat = p.expanded_data[0].patients[pt].states[0].true_ratio;
                             tooltip_error = p.expanded_data[0].patients[pt].states[0].error_warning;
@@ -1024,8 +1112,8 @@ let viewR = function(p) {
                                 return id.startsWith(ref_id);
                             });
 
-                        } else if (p.dist(p.mouseX, p.mouseY, p.margin.left + (x_from + x_to) / 2, circleCenter_y) < circleDiam / 2 &&
-                            p.mouseY > p.height - p.margin.bottom - (y_from + y_to) / 2) {
+                        } else if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam / 2 &&
+                            p.mouseY > circleMid_y) {
 
                             tooltip_rat = p.expanded_data[0].patients[pt].states[1].true_ratio;
                             tooltip_error = p.expanded_data[0].patients[pt].states[1].error_warning;
@@ -1038,21 +1126,23 @@ let viewR = function(p) {
 
                     } else {
 
+						// single location, multiple patients, single state, one timepoint
+
                         var fill_color = p.getHeatColor(p.expanded_data[0].patients[pt].ratio, p.expanded_data[0].patients[pt].negative);
 
                         p.fill(fill_color);
                         if (p.brightness(fill_color_voxel) > 80) p.stroke(0);
                         else p.stroke(255);
 
-                        var circleCenter_y = p.height - p.margin.bottom - y_from + (pt + 0.5) * circleDiam;
+                        var circleMid_y = p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2 + y_offset;
 
-                        p.ellipse(p.margin.left + (x_from + x_to) / 2,
-                            circleCenter_y,
+                        p.ellipse(circleMid_x,
+                            circleMid_y,
                             circleDiam, circleDiam);
 
                         // check for mouse 
 
-                        if (p.dist(p.mouseX, p.mouseY, p.margin.left + (x_from + x_to) / 2, circleCenter_y) < circleDiam / 2) {
+                        if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam2 / 2) {
 
                             tooltip_rat = p.expanded_data[0].patients[pt].true_ratio;
                             tooltip_error = p.expanded_data[0].patients[pt].error_warning;
@@ -1061,8 +1151,8 @@ let viewR = function(p) {
                                 var ref_id = p.expanded_data[0].voxel + "_" + p.expanded_data[0].patients[pt].patient;
                                 return id.startsWith(ref_id);
                             });
-                        }
 
+                        }
                     }
                 }
             }
@@ -1074,14 +1164,19 @@ let viewR = function(p) {
                 var vox_rect_x_from = x_from + vox * vox_rect_width;
                 var vox_rect_x_to = x_from + (vox + 1) * vox_rect_width;
 
-                if (p.expanded_data[vox].patients.length == 1) { // multiple voxels 1 patient
+                if (p.expanded_data[vox].patients.length == 1) { 	
+					
+                    // multiple locations, single patient
+                    
                     if (p.expanded_data[vox].patients[0].states.length > 1) {
+
+						// multiple locations, single patient, dual state
 
                         var fill_color_top = p.getHeatColor(p.expanded_data[vox].patients[0].states[0].ratio, p.expanded_data[vox].patients[0].states[0].negative);
                         var fill_color_bottom = p.getHeatColor(p.expanded_data[vox].patients[0].states[1].ratio, p.expanded_data[vox].patients[0].states[0].negative);
 
                         p.fill(fill_color_top);
-                        if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                        if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                         else p.stroke(255);
 
                         p.rect(p.margin.left + vox_rect_x_from,
@@ -1144,11 +1239,13 @@ let viewR = function(p) {
                         }
 
                     } else {
+						
+						// multiple locations, single patient, single state
 
                         var fill_color = p.getHeatColor(p.expanded_data[vox].patients[0].ratio, p.expanded_data[vox].patients[0].negative);
 
                         p.fill(fill_color);
-                        if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                        if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                         else p.stroke(255);
 
                         p.rect(p.margin.left + vox_rect_x_from,
@@ -1184,12 +1281,14 @@ let viewR = function(p) {
                     }
 
 
-                } else { // multiple voxels multiple patients
+                } else { 
+                    
+                    // multiple locations, multiple patients
 
                     var fill_color = p.getHeatColor(p.expanded_data[vox].ratio, p.expanded_data[vox].negative);
 
                     p.fill(fill_color);
-                    if (p.brightness(tile_fill_color) > 80) p.stroke(0);
+                    if (p.brightness(cell_fill_color) > 80) p.stroke(0);
                     else p.stroke(255);
 
                     p.rect(p.margin.left + vox_rect_x_from,
@@ -1212,30 +1311,53 @@ let viewR = function(p) {
                         });
                     }
 
-                    var col_size = 6;
+                    // determine the maximum possible diameter of a circle that would fit inside, round it to the nearest lower integer
+                    var max_diam = Math.floor(Math.sqrt((vox_rect_x_to - vox_rect_x_from) * (y_from - y_to) / p.expanded_data[vox].patients.length));
 
-                    var circleCols = Math.ceil(p.expanded_data[vox].patients.length / col_size);
+                    // find the optimal placement
+                    var col_size = Math.floor((y_from - y_to) / max_diam);            // possible number of elements in a col
+                    var row_size = Math.floor((vox_rect_x_to - vox_rect_x_from) / max_diam);  // possible number of elements in a row
 
-                    var circleDiam = Math.min((y_from - y_to - 10) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (vox_rect_x_to - vox_rect_x_from - 5));
-                    var circleDiam2 = Math.min((y_from - y_to) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (vox_rect_x_to - vox_rect_x_from - 5));
+                    var rows = Math.ceil(p.expanded_data[vox].patients.length / row_size);
+                    var row_height = Math.floor((y_from - y_to - 10) / rows);
 
-                    var col_width = (vox_rect_x_to - vox_rect_x_from) / circleCols;
+                    var cols = Math.ceil(p.expanded_data[vox].patients.length / col_size); // number of cols needed
+                    var col_width = Math.floor((vox_rect_x_to - vox_rect_x_from) / cols); // width of a col
 
-                    var corner_diam = 50 / Math.max(2, Math.min(p.expanded_data[vox].patients.length, col_size));
+                    var circleDiam_row = Math.min(row_height, (vox_rect_x_to - vox_rect_x_from) / (Math.min(p.expanded_data[vox].patients.length, row_size)));
+                    var circleDiam_col = Math.min((y_from - y_to - 10) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (col_width - 5));
+                    
+                    var circleDiam, circleDiam2;
+
+                    if (circleDiam_row > circleDiam_col) {
+                        col_size = Math.floor((y_from - y_to) / circleDiam_row); 
+                        cols = Math.ceil(p.expanded_data[vox].patients.length / col_size);
+                        col_width = Math.floor((vox_rect_x_to - vox_rect_x_from) / cols);
+                        circleDiam = Math.min((y_from - y_to - 10) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (col_width - 5));
+                        circleDiam2 = Math.min((y_from - y_to) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (col_width - 5));
+                    } else {
+                        circleDiam = circleDiam_col;
+                        circleDiam2 = Math.min((y_from - y_to) / (Math.min(p.expanded_data[vox].patients.length, col_size)), (col_width - 5));
+                    }
+
+                    var corner_diam = 50 / Math.max(2, Math.min(p.expanded_data[vox].patients.length, col_size)); // how rounded the square should be
 
                     for (var pt = 0; pt < p.expanded_data[vox].patients.length; pt++) {
 
                         var current_col = Math.floor(pt / col_size);
                         var circleMid_x = p.margin.left + vox_rect_x_from + col_width * (current_col + 0.5);
+                        var y_offset = Math.floor(((y_from - y_to) - (circleDiam2 * Math.min(p.expanded_data[vox].patients.length - current_col * col_size, col_size))) / 2);
 
                         if (hasTimepoints) {
 
                             var rect_x1 = circleMid_x - circleDiam2 / 2;
                             var rect_x2 = circleMid_x + circleDiam2 / 2;
-                            var rect_y1 = p.height - p.margin.bottom - y_from + (pt % col_size) * circleDiam2;
-                            var rect_y2 = p.height - p.margin.bottom - y_from + (pt % col_size + 1) * circleDiam2;
+                            var rect_y1 = p.height - p.margin.bottom - y_from + (pt % col_size) * circleDiam2 + y_offset;
+                            var rect_y2 = p.height - p.margin.bottom - y_from + (pt % col_size + 1) * circleDiam2 + y_offset;
 
-                            if (p.expanded_data[vox].patients[pt].states.length > 1) {
+                            if (p.expanded_data[vox].patients[pt].states.length > 1) {		
+								
+								// multiple locations, multiple patients, dual state, multiple timepoints
 
                                 var fill_color_top = p.getHeatColor(p.expanded_data[vox].patients[pt].states[0].ratio, p.expanded_data[vox].patients[pt].states[0].negative);
                                 var fill_color_bottom = p.getHeatColor(p.expanded_data[vox].patients[pt].states[1].ratio, p.expanded_data[vox].patients[pt].states[1].negative);
@@ -1300,6 +1422,9 @@ let viewR = function(p) {
                                 }
 
                             } else {
+
+                                // multiple locations, multiple patients, single state, multiple timepoints
+                                
                                 var fill_color = p.getHeatColor(p.expanded_data[vox].patients[pt].ratio, p.expanded_data[vox].patients[pt].negative);
 
                                 p.fill(fill_color);
@@ -1338,6 +1463,8 @@ let viewR = function(p) {
                             }
                         } else {
                             if (p.expanded_data[vox].patients[pt].states.length > 1) {
+								
+								// more locations, more patients, dual state, one timepoint
 
                                 var fill_color_top = p.getHeatColor(p.expanded_data[vox].patients[pt].states[0].ratio, p.expanded_data[vox].patients[pt].states[0].negative);
                                 var fill_color_bottom = p.getHeatColor(p.expanded_data[vox].patients[pt].states[1].ratio, p.expanded_data[vox].patients[pt].states[1].negative);
@@ -1345,23 +1472,25 @@ let viewR = function(p) {
                                 p.fill(fill_color_top);
                                 if (p.brightness(fill_color) > 80) p.stroke(0);
                                 else p.stroke(255);
+                                
+                                var circleMid_y = p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2 + y_offset;
 
                                 p.arc(circleMid_x,
-                                    p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2,
+                                    circleMid_y,
                                     circleDiam, circleDiam,
                                     p.PI, 0, p.CHORD);
 
                                 p.fill(fill_color_bottom);
 
                                 p.arc(circleMid_x,
-                                    p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2,
+                                    circleMid_y,
                                     circleDiam, circleDiam,
                                     0, p.PI, p.CHORD);
 
                                 // check for mouse 
 
-                                if (p.dist(p.mouseX, p.mouseY, circleMid_x, p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2) < circleDiam2 / 2 &&
-                                    p.mouseY < p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2) {
+                                if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam2 / 2 &&
+                                    p.mouseY < circleMid_y) {
 
                                     tooltip_rat = p.expanded_data[vox].patients[pt].states[0].true_ratio;
                                     tooltip_error = p.expanded_data[vox].patients[pt].states[0].error_warning;
@@ -1371,8 +1500,8 @@ let viewR = function(p) {
                                         return id.startsWith(ref_id);
                                     });
 
-                                } else if (p.dist(p.mouseX, p.mouseY, circleMid_x, p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2) < circleDiam2 / 2 &&
-                                    p.mouseY > p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2) {
+                                } else if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam2 / 2 &&
+                                    p.mouseY > circleMid_y) {
 
                                     tooltip_rat = p.expanded_data[vox].patients[pt].states[1].true_ratio;
                                     tooltip_error = p.expanded_data[vox].patients[pt].states[1].error_warning;
@@ -1384,19 +1513,24 @@ let viewR = function(p) {
                                 }
 
                             } else {
+
+                                // more locations, more patients, single state, one timepoint
+                                
                                 var fill_color = p.getHeatColor(p.expanded_data[vox].patients[pt].ratio, p.expanded_data[vox].patients[pt].negative);
 
                                 p.fill(fill_color);
                                 if (p.brightness(fill_color) > 80) p.stroke(0);
                                 else p.stroke(255);
+                                
+                                var circleMid_y = p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2 + y_offset;
 
                                 p.ellipse(circleMid_x,
-                                    p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2,
+                                    circleMid_y,
                                     circleDiam, circleDiam);
 
                                 // check for mouse 
 
-                                if (p.dist(p.mouseX, p.mouseY, circleMid_x, p.height - p.margin.bottom - y_from + (pt % col_size + 0.5) * circleDiam2) < circleDiam2 / 2) {
+                                if (p.dist(p.mouseX, p.mouseY, circleMid_x, circleMid_y) < circleDiam2 / 2) {
 
                                     tooltip_rat = p.expanded_data[vox].patients[pt].true_ratio;
                                     tooltip_error = p.expanded_data[vox].patients[pt].error_warning;
@@ -1422,7 +1556,7 @@ let viewR = function(p) {
 
         if (tooltip_rat != -1) {
             p.drawTooltipRatio(tooltip_rat, tooltip_error);
-        } else if (mouse_over_tile) {
+        } else if (mouse_over_cell) {
             //	get the ratio between X and Y integrals
 
             var tile_avg_x = 0,
@@ -1453,7 +1587,7 @@ let viewR = function(p) {
             p.drawTooltipRatio(rat, error_warning);
         }
 
-        p5_view_L.updateScene(); // highlight in left view
+        //p5_view_L.updateScene(); // highlight in left view
     }
 
     p.drawTimepoints = function(timepoints, x_from, y_from, x_to, y_to, bg_color /*, min_rat, max_rat*/ ) {
@@ -1469,10 +1603,12 @@ let viewR = function(p) {
             p.stroke(255);
         }
 
-        var x_prev, y_prev;
+        var x_prev = -1, y_prev = -1;
 
         for (var i = 0; i < timepoints.length; i++) {
-            var y_pos = p.constrain(p.map(timepoints[i].ratio, -10, 10, y_to - 5, y_from + 5), y_from + 5, y_to - 5);
+            if (!isFinite(timepoints[i].ratio)) continue; // skip undefined values
+
+            var y_pos = p.constrain(p.map(timepoints[i].ratio, heatmap_limits[1], heatmap_limits[0], y_to - 5, y_from + 5), y_from + 5, y_to - 5);
             var x_pos;
             if (timepoints.length % 2 == 1) {
                 x_pos = (x_to + x_from) / 2 + (i - Math.floor(timepoints.length / 2)) * line_len;
@@ -1482,7 +1618,7 @@ let viewR = function(p) {
 
             p.ellipse(x_pos, y_pos, circle_diam, circle_diam);
 
-            if (i > 0) {
+            if (i > 0 && x_prev != -1 && y_prev != -1) {
                 p.line(x_prev, y_prev, x_pos, y_pos);
             }
 
@@ -1518,6 +1654,7 @@ let viewR = function(p) {
     };
 
     // CHANGES from JULI
+
     p.drawXValues = function() {
         var y_base = p.height - p.margin.bottom + 10;
         var maxRectHeight = p.margin.bottom * 0.7;
@@ -1576,49 +1713,6 @@ let viewR = function(p) {
 
             p.rect(p.margin.left + p.trueTicksPos.x[x], y_base, p.margin.left + p.trueTicksPos.x[x + 1], y_base + rectHeight);
 
-            // label the metabolite
-            var textSize = p.constrain(p.cellSize.x * 0.65 * p.xScales[x], 11, 18);
-            p.textSize(textSize);
-            p.textAlign(p.CENTER, p.CENTER);
-            p.noStroke();
-
-            p.push();
-            var textWidth = p.textWidth(p.xMetabolites[x]);
-
-
-            let textpos = rectHeight;
-
-            if (draw_box_plot) {
-                textpos = p.map(q3, 0, 1, 0, maxRectHeight);
-            }
-            if (draw_range) {
-                textpos = p.map(max, 0, 1, 0, maxRectHeight);
-            }
-
-            if (textWidth < rectHeight * 0.7) {
-
-                var text_x = p.margin.left + (p.trueTicksPos.x[x] + p.trueTicksPos.x[x + 1]) / 2;
-                var text_y = y_base + textpos / 2;
-
-                p.translate(text_x, text_y);
-                p.rotate(p.HALF_PI);
-
-                p.fill(255);
-                p.text(p.xMetabolites[x], 0, 0);
-            } else {
-
-                var text_x = p.margin.left + (p.trueTicksPos.x[x] + p.trueTicksPos.x[x + 1]) / 2;
-                var text_y = y_base + textpos + deviationHeight / 2 + 7 + textWidth / 2;
-
-                p.translate(text_x, text_y);
-                p.rotate(p.HALF_PI);
-
-                p.fill(0);
-                p.text(p.xMetabolites[x], 0, 0);
-            }
-
-            p.pop();
-
             p.stroke(51);
 
             // draw the boxplot!
@@ -1649,9 +1743,6 @@ let viewR = function(p) {
                 let min_pos = p.map(min, 0, 1, 0, maxRectHeight);
                 let max_pos = p.map(max, 0, 1, 0, maxRectHeight);
 
-
-                textpos = max_pos;
-
                 // horizontal line max
                 p.line(p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5 - hairSize / 2,
                     y_base + max_pos,
@@ -1671,8 +1762,7 @@ let viewR = function(p) {
                     p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5,
                     y_base + min_pos);
 
-            }
-
+            }            
 
             // draw the std. deviation hairs			
             /* p.noFill();
@@ -1682,7 +1772,51 @@ let viewR = function(p) {
             p.line(p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5 - hairSize / 2, y_base + rectHeight + deviationHeight * 0.5, p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5 + hairSize / 2, y_base + rectHeight + deviationHeight * 0.5);
             p.line(p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5 - hairSize / 2, y_base + rectHeight - deviationHeight * 0.5, p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5 + hairSize / 2, y_base + rectHeight - deviationHeight * 0.5);
             p.line(p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5, y_base + rectHeight - deviationHeight * 0.5, p.margin.left + p.trueTicksPos.x[x] + p.cellSize.x * p.xScales[x] * 0.5, y_base + rectHeight + deviationHeight * 0.5);
-*/
+*/          
+            // label the metabolite
+            var textSize = p.constrain(p.cellSize.x * 0.65 * p.xScales[x], 6, 18);
+            p.textSize(textSize);
+            p.textAlign(p.CENTER, p.CENTER);
+            p.noStroke();
+
+            p.push();
+            var textWidth = p.textWidth(p.xMetabolites[x]);
+
+            var text_pos = rectHeight;
+            
+            if (draw_box_plot) {
+                text_pos = Math.max(p.map(q3, 0, 1, 0, maxRectHeight), rectHeight);
+            }
+
+            if (draw_range) {
+                text_pos = Math.max(p.map(max, 0, 1, 0, maxRectHeight), rectHeight);
+            } 
+
+            var text_x = p.margin.left + (p.trueTicksPos.x[x] + p.trueTicksPos.x[x + 1]) / 2;
+            var text_y = y_base + text_pos + textWidth/2 + 5;
+
+            if (text_y + textWidth/2 > p.height - 3) {
+                text_y = y_base + text_pos - textWidth/2 - 5;
+            }
+
+            // check for the reset button as well
+            if (p.margin.left + p.trueTicksPos.x[x] >= p.my_buttons[0].position.x && text_y + textWidth/2 > p.my_buttons[0].position.y - 3) {
+                text_y = p.my_buttons[0].position.y - 3 - textWidth/2;
+            }
+                
+            p.translate(text_x, text_y);
+            p.rotate(p.HALF_PI);
+
+            p.fill(255, 180);
+            p.noStroke();
+            p.rectMode(p.CENTER);
+            p.rect(0, 0, textWidth + 5, p.textSize() + 4);
+            p.rectMode(p.CORNERS);
+
+            p.fill(0);
+            p.text(p.xMetabolites[x], 0, 0);
+            
+            p.pop();
         }
     };
 
@@ -1730,53 +1864,20 @@ let viewR = function(p) {
             concentration_avg /= p.yGroups.length;
             stddev_avg /= p.yGroups.length;
 
-            median /= p.xGroups.length;
-            min /= p.xGroups.length;
-            max /= p.xGroups.length;
-            q1 /= p.xGroups.length;
-            q3 /= p.xGroups.length;
+            median /= p.yGroups.length;
+            min /= p.yGroups.length;
+            max /= p.yGroups.length;
+            q1 /= p.yGroups.length;
+            q3 /= p.yGroups.length;
 
 
             var rectHeight = p.map(concentration_avg, 0, 1, 0, maxRectHeight);
             var deviationHeight = p.map(stddev_avg, 0, 1, 0, maxDeviationHeight);
 
             p.noStroke();
-            p.fill(133); // TODO
+            p.fill(133); 
 
             p.rect(x_base - rectHeight, p.height - p.margin.bottom - p.trueTicksPos.y[y], x_base, p.height - p.margin.bottom - p.trueTicksPos.y[y + 1]);
-
-            // label the metabolite
-            var textSize = p.constrain(p.cellSize.y * 0.65 * p.yScales[y], 11, 18);
-            p.textSize(textSize);
-            p.textAlign(p.CENTER, p.CENTER);
-            p.noStroke();
-
-            var textWidth = p.textWidth(p.yMetabolites[y]);
-            let text_pos = rectHeight;
-
-            if (draw_box_plot) {
-                text_pos = p.map(q3, 0, 1, 0, maxRectHeight);
-            }
-            if (draw_range) {
-                text_pos = p.map(max, 0, 1, 0, maxRectHeight);
-            }
-
-
-            if (textWidth < rectHeight * 0.7) {
-
-                var text_x = x_base - text_pos / 2;
-                var text_y = p.height - p.margin.bottom - (p.trueTicksPos.y[y] + p.trueTicksPos.y[y + 1]) / 2;
-
-                p.fill(255);
-                p.text(p.yMetabolites[y], text_x, text_y);
-            } else {
-
-                var text_x = x_base - text_pos - deviationHeight / 2 - textWidth / 2 - 7;
-                var text_y = p.height - p.margin.bottom - (p.trueTicksPos.y[y] + p.trueTicksPos.y[y + 1]) / 2;
-
-                p.fill(0);
-                p.text(p.yMetabolites[y], text_x, text_y);
-            }
 
             // p.noFill();
             // p.stroke(0);
@@ -1785,7 +1886,6 @@ let viewR = function(p) {
             // p.line(x_base - rectHeight - deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 - hairSize / 2, x_base - rectHeight - deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 + hairSize / 2);
             // p.line(x_base - rectHeight + deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 - hairSize / 2, x_base - rectHeight + deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 + hairSize / 2);
             // p.line(x_base - rectHeight - deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5, x_base - rectHeight + deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5);
-
 
             p.stroke(51);
 
@@ -1797,13 +1897,10 @@ let viewR = function(p) {
                 p.stroke(51);
                 p.fill("white");
 
-
-
                 let q3_pos = p.map(q3, 0, 1, 0, maxRectHeight);
                 let q1_pos = p.map(q1, 0, 1, 0, maxRectHeight);
                 let median_pos = p.map(median, 0, 1, 0, maxRectHeight);
 
-                text_pos = q3_pos;
                 //p.rect(p.margin.left + p.trueTicksPos.x[x], y_base, p.margin.left + p.trueTicksPos.x[x + 1], y_base + rectHeight);
 
                 //p.rect(x_base - rectHeight, p.height - p.margin.bottom - p.trueTicksPos.y[y], x_base, p.height - p.margin.bottom - p.trueTicksPos.y[y + 1]);
@@ -1826,9 +1923,6 @@ let viewR = function(p) {
 
                 // p.line(x_base - rectHeight - deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 - hairSize / 2, x_base - rectHeight - deviationHeight * 0.5, p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 + hairSize / 2);
 
-
-                text_pos = max_pos;
-
                 // vertical line max
                 p.line(x_base - max_pos,
                     p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5 - hairSize / 2,
@@ -1850,12 +1944,45 @@ let viewR = function(p) {
                     x_base - min_pos,
                     p.height - p.margin.bottom - p.trueTicksPos.y[y] - p.cellSize.y * p.yScales[y] * 0.5);
             }
+            
+            // label the metabolite
+            var textSize = p.constrain(p.cellSize.y * 0.65 * p.yScales[y], 6, 18);
+            p.textSize(textSize);
+            p.textAlign(p.CENTER, p.CENTER);
+            p.noStroke();
+
+            var textWidth = p.textWidth(p.yMetabolites[y]);
+            var text_pos = rectHeight;
+            
+            if (draw_box_plot) {
+                text_pos = Math.max(p.map(q3, 0, 1, 0, maxRectHeight), rectHeight);
+            }
+
+            if (draw_range) {
+                text_pos = Math.max(p.map(max, 0, 1, 0, maxRectHeight), rectHeight);
+            } 
+
+            var text_y = p.height - p.margin.bottom - (p.trueTicksPos.y[y] + p.trueTicksPos.y[y + 1]) / 2;
+            var text_x = x_base - text_pos - textWidth/2 - 5;
+
+            if (text_x - textWidth/2 < 3) {
+                text_x = x_base - text_pos + textWidth/2 + 5;
+
+                p.fill(240, 180);
+                p.noStroke();
+                p.rectMode(p.CENTER);
+                p.rect(text_x, text_y, textWidth + 5, p.textSize() + 4);
+                p.rectMode(p.CORNERS);
+            }
+
+            p.fill(0);
+            p.text(p.yMetabolites[y], text_x, text_y);
         }
     };
 
     // END CHANGES from Juli
 
-    p.mouseOverTile = function(x, y) {
+    p.mouseOverCell = function(x, y) {
         //	get coordinates of the tile
         var x_from = p.trueTicksPos.x[x];
         var x_to = p.trueTicksPos.x[x + 1];
@@ -1887,10 +2014,10 @@ let viewR = function(p) {
 
     }
 
-    p.expandTile = function() {
+    p.expandCell = function() {
 
-        var scaleRatioX = 0.5; // portion of the grid space the expanded tile will take up
-        var scaleRatioY = 0.5;
+        var scaleRatioX = 0.65; // portion of the grid space the expanded tile will take up
+        var scaleRatioY = 0.65;
 
         var shrink_x = (p.axisLength.x * (1 - scaleRatioX)) / (p.xMetabolites.length - 1);
         var shrink_y = (p.axisLength.y * (1 - scaleRatioY)) / (p.yMetabolites.length - 1);
@@ -2044,7 +2171,7 @@ let viewR = function(p) {
             p.updateScene();
         }
 
-        // tile expansion
+        // cell expansion
 
         if (p.mouseX > p.margin.left && p.mouseX < p.width - p.margin.right && p.mouseY > p.margin.top && p.mouseY < p.height - p.margin.bottom) {
             var to_expand = { x: -1, y: -1 };
@@ -2077,7 +2204,7 @@ let viewR = function(p) {
 
                 p.mouseMoved();
                 p.highlightVoxels([]);   // remove all highlights
-                p5_view_L.updateScene(); // also update scene if nothing is highlighted anymore
+//                p5_view_L.updateScene(); // also update scene if nothing is highlighted anymore
             } else {
 
                 p.tileExpanded = to_expand;
@@ -2085,9 +2212,17 @@ let viewR = function(p) {
 
             if (p.tileExpanded.x != -1 && p.tileExpanded.y != -1) {
 
-                p.expandTile();
-            }
+                p.countExpandedRatios();
 
+                if ( p.expanded_data.length == 0 || (p.expanded_data.length == 1 && p.expanded_data[0].patients.length == 1 &&  
+                     p.expanded_data[0].patients[0].states.length == 1 && p.expanded_data[0].patients[0].states[0].timepoints.length == 1)) {
+
+                    p.tileExpanded = {x: -1, y: -1};
+                    p.mouseMoved();
+                } else {
+                    p.expandCell();
+                }
+            }
         }
     }
 
@@ -2107,11 +2242,34 @@ let viewR = function(p) {
         p.showRemoveButton();
     }
 
+    // this is not a standard p5 function, have to add a handler in jQuery
+    p.mouseEnter = function() {
+
+        var groups_to_collapse = [];
+        for (var x of p.xGroups) {
+            groups_to_collapse.push(app.voxel_groups[x]);
+        }
+        for (var y of p.yGroups) {
+            if (!p.xGroups.includes(y)) groups_to_collapse.push(app.voxel_groups[y]);
+        }
+
+        // show all spectra in the left panel
+        selected_voxels = collapseAndSort(groups_to_collapse);
+        p5_view_L.updateScene();
+        if (ALL_VOXELS_GROUP != -1) app.voxel_groups[ALL_VOXELS_GROUP].sortVoxels();
+    }
+
+    // this is not a standard p5 function, have to add a handler in jQuery
+    p.mouseLeave = function() {
+        ids_to_highlight = [];
+        selected_voxels = [];
+        p.highlightVoxels([]);
+        p5_view_L.updateScene();
+        if (ALL_VOXELS_GROUP != -1) app.voxel_groups[ALL_VOXELS_GROUP].sortVoxels();
+    }
+
     p.mouseMoved = function() {
         if (p.mouseX < 0 || p.mouseX > p.width || p.mouseY < 0 || p.mouseY > p.height) {
-
-			selected_voxels = [];
-			p5_view_L.updateScene();
 			return;
 		}
 
@@ -2123,10 +2281,6 @@ let viewR = function(p) {
         for (var y of p.yGroups) {
             if (!p.xGroups.includes(y)) groups_to_collapse.push(app.voxel_groups[y]);
         }
-
-        // get voxels from all groups together and sort them (see voxel_groups.js for function definition)
-        selected_voxels = collapseAndSort(groups_to_collapse);
-		p5_view_L.updateScene();
 
         // check if mouse is over a button - can be done even with incomplete data
 
@@ -2147,7 +2301,7 @@ let viewR = function(p) {
             return;
         }
 
-        // check if mouse is over a tile 
+        // check if mouse is over a cell 
 
         var tile_x = -1,
             tile_y = -1;
@@ -2173,7 +2327,7 @@ let viewR = function(p) {
             p.cursor(p.HAND, 32, 32);
         } else if (tile_x != -1 && tile_y != -1) {
             p.updateScene();
-            p.mouseOverTile(tile_x, tile_y);
+            p.mouseOverCell(tile_x, tile_y);
             p.cursor(p.CROSS, 16, 16);
         } else {
             p.updateScene();
@@ -2181,12 +2335,18 @@ let viewR = function(p) {
         }
 
         // display info about metabolites
-
-        //	TODO
     }
 };
 
 // prevent default behavior on right click
-$("#viewR").contextmenu(function(evt) {
+$("#viewR").on('contextmenu', function(evt) {
     evt.preventDefault();
+});
+
+$("#viewR").on('mouseenter', function(){
+    p5_view_R.mouseEnter();
+});
+
+$("#viewR").on('mouseleave', function(){
+    p5_view_R.mouseLeave();
 });

@@ -7,15 +7,15 @@
 
 var selected_voxels = [];   // this array is used only for the spectral view in the left panel when interacting with the right view (contains all voxels in currently selected groups)
 var datapoints_loaded = 0;
-var BASELINE_COL = 3;
+const BASELINE_COL = 3;
 
-var CONCENTRATION_MAX = 30;
-var STDEV_MAX = 60;
-var spectrum_length = 1024;
+const CONCENTRATION_MAX = 30;
+const STDEV_MAX = 60;
+const spectrum_length = 1024;
 
 // creates an empty voxel group, indicate by boolean value whether the group is custom or auto-generated
 function createVoxelGroup(group_name, custom) {
-    app.voxel_groups.push(new VoxelGroup(group_name, custom));
+    app.voxel_groups.push(new VoxelGroup(app.voxel_groups.length, group_name, custom));
     //updateDropdownList();
 }
 
@@ -83,6 +83,21 @@ function addVoxel(patient_name, vox_location, vox_id, vox_data, png_location_ima
 
         if (time_idx == -1) {
 
+            var time_array_pos = app.patient_data[patient_idx].timepoints.findIndex(function(element){						
+				var day_a = parseInt(element.time.split('/')[0]);
+				var mon_a = parseInt(element.time.split('/')[1]);
+				var year_a = parseInt(element.time.split('/')[2]);
+				
+				var day_b = parseInt(time_point.split('/')[0]);
+				var mon_b = parseInt(time_point.split('/')[1]);
+				var year_b = parseInt(time_point.split('/')[2]);
+				
+				var time_a = day_a + mon_a * 31 + year_a * 12 * 31;
+				var time_b = day_b + mon_b * 31 + year_b * 12 * 31;
+
+				return time_a > time_b;
+			});
+
             var new_state = {
                 state: state_no,
                 highlighted: false,
@@ -95,7 +110,9 @@ function addVoxel(patient_name, vox_location, vox_id, vox_data, png_location_ima
                 states: [new_state]
             };
 
-            app.patient_data[patient_idx].timepoints.push(new_timepoint);
+            if (time_array_pos != -1) app.patient_data[patient_idx].timepoints.splice(time_array_pos, 0, new_timepoint);
+            else app.patient_data[patient_idx].timepoints.push(new_timepoint);
+            
         } else {
 
             var state_idx = app.patient_data[patient_idx].timepoints[time_idx].states.findIndex(function(element) {
@@ -108,7 +125,9 @@ function addVoxel(patient_name, vox_location, vox_id, vox_data, png_location_ima
                     highlighted: false,
                     voxels: [datapoint]
                 };
-                app.patient_data[patient_idx].timepoints[time_idx].states.push(new_state);
+
+				if (state_no == 1) app.patient_data[patient_idx].timepoints[time_idx].states.push(new_state);
+				else app.patient_data[patient_idx].timepoints[time_idx].states.splice(0, 0, new_state);	
             } else {
 
                 app.patient_data[patient_idx].timepoints[time_idx].states[state_idx].voxels.push(datapoint);
@@ -267,6 +286,8 @@ function fillMissingValues() {
 }
 
 function normalizeData() {
+    p5_view_L.setMessage("Normalizing values");
+    
     var mins = {};
     var maxes = {};
     var cols_to_normalize = fillMissingValues();
@@ -294,13 +315,11 @@ function normalizeData() {
 
     var global_min = {};
     var global_max = {};
-    var global_peak = {};
 
     // determine global maximum and minimum and the highest peak (in any direction) in each column
     cols_to_normalize.forEach(function(column) {
         global_min[column] = Math.min(...mins[column]);
         global_max[column] = Math.max(...maxes[column]);
-        global_peak[column] = Math.max(Math.abs(global_max[column]), Math.abs(global_min[column]));
     });
 
     // normalize all datapoints (not just the new ones)
@@ -308,25 +327,16 @@ function normalizeData() {
         patient.timepoints.forEach(function(timepoint) {
             timepoint.states.forEach(function(state) {
                 for (var s = 0; s < state.voxels.length; s++) {
-                    var normalized_datapoint = {}; // normalized heights of the peak (positive / negative perserved)
                     var normalized_datapoint_disp = {}; // normalized value between 0 and 1 for displaying the curve
 
                     cols_to_normalize.forEach(function(column) {
-                        normalized_datapoint[column] = [];
                         normalized_datapoint_disp[column] = [];
 
                         for (var j = 0; j < state.voxels[s].data[column].length; j++) {
                             normalized_datapoint_disp[column][j] = p5_view_L.map(state.voxels[s].data[column][j], global_min[column], global_max[column], 0, 1); // use p5 mapping function from an instance of p5
-
-                            if (state.voxels[s].data[column][j] < 0) {
-                                normalized_datapoint[column][j] = (-1) * p5_view_L.map(Math.abs(state.voxels[s].data[column][j]), 0, global_peak[column], 0, 1); // use p5 mapping function from an instance of p5
-                            } else {
-                                normalized_datapoint[column][j] = p5_view_L.map(state.voxels[s].data[column][j], 0, global_peak[column], 0, 1); // use p5 mapping function from an instance of p5
-                            }
                         }
                     });
 
-                    state.voxels[s].normalized_data = normalized_datapoint;
                     state.voxels[s].displayed_data = normalized_datapoint_disp;
                 }
             });

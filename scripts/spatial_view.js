@@ -21,6 +21,9 @@ let viewL = function(p) {
         p.spectrumMargin = { left: Math.round(w / 15), top: Math.round(h * 0.66), right: Math.round(w / 15), bottom: Math.round(h / 25) };
         p.canvas_size = [p.width - p.voxelMargin.right - p.voxelMargin.left, p.height - p.voxelMargin.bottom - p.voxelMargin.top];
 
+        p.message = "Data not loaded";
+        p.error_state = false;      // is an error message displayed?
+
         // selected dataopint
         p.chosen_patient = 0;
         p.chosen_timepoint = 0;
@@ -90,22 +93,38 @@ let viewL = function(p) {
         p.noFill();
         p.rect(0, 0, p.width - 2, p.height - 2, 10);
 
-        if (app.loading_data) {
+        if (p.message != "") {
             p.fill(0);
             p.noStroke();
             p.textFont("Arial", 14);
-            p.text("Loading data", p.width / 2, p.height / 2);
-        } else if (app.patient_data.length == 0) {
-            p.fill(0);
-            p.noStroke();
-            p.textFont("Arial", 14);
-            p.text("No data loaded", p.width / 2, p.height / 2);
+            p.text(p.message, p.width / 2, p.height / 2);
         } else {
             p.highlightVoxels();
             p.drawLines();
             p.drawVoxelPosition();
             p.drawSpectra();
         }
+    }
+
+    p.setMessage = function(msg) {
+        p.message = msg;
+        p.updateScene();
+    }
+
+    p.displayError = function(err_msg) {
+        if (p.error_state) return;
+        
+        p.error_state = true;
+
+        var original_msg = p.message;
+        p.message = err_msg;
+        p.updateScene();
+
+        setTimeout(() => {
+            p.message = original_msg;
+            p.error_state = false;
+            p.updateScene();
+        }, 3000);
     }
 
     p.drawLines = function() {
@@ -361,9 +380,14 @@ let viewL = function(p) {
         var displayed_spectra = [];
 
         if (selected_voxels.length > 0) {
+            // instead of sorting: push the highlighted first, the rest after
             selected_voxels.forEach(function(elem) {
-                displayed_spectra.push({ data: elem.values_disp["Data"], highlighted: elem.highlighted });
+                if (elem.highlighted) displayed_spectra.push({ data: elem.values_disp["Data"], highlighted: true });
             });
+            selected_voxels.forEach(function(elem) {
+                if (!elem.highlighted) displayed_spectra.push({ data: elem.values_disp["Data"], highlighted: false });
+            });
+
         } else if (p.active_voxel != -1) {
             displayed_spectra.push({ data: app.patient_data[p.displayed_patient].timepoints[p.displayed_timepoint].states[p.displayed_state].voxels[p.active_voxel].displayed_data["Data"], highlighted: false });
         } else {
@@ -371,7 +395,7 @@ let viewL = function(p) {
         }
 
 
-        //selected_voxels.forEach(function(elem) {
+        // draw in reverse order so that the highlighted spectra are on top
         for (var i = displayed_spectra.length - 1; i >= 0; i--) {
             var x_position = 0;
 
@@ -397,7 +421,7 @@ let viewL = function(p) {
             p.endShape();
         }
 
-
+        
     }
 
     p.highlightVoxels = function() {
@@ -551,7 +575,7 @@ let viewL = function(p) {
 
                 } else {
                     var state_idx = app.patient_data[p.displayed_patient].timepoints[time_idx].states.findIndex(function(element) {
-                        return element.state == state_no;
+                        return element.state == parseInt(state);
                     });
 
 

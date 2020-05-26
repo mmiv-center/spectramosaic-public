@@ -3,12 +3,13 @@
 var ALL_VOXELS_GROUP = -1;  // an index of the group containing all voxels
 
 class VoxelGroup {
-    constructor(group_name, custom) {
+    constructor(idx, group_name, custom) {
         this.name = group_name;
         this.voxels = [];
         this.available_metabolites = [];
         this.metabolite_averages = {};
         this.custom = custom;
+        this.group_idx = idx;
     }
 
     addVoxel(voxel) {
@@ -18,6 +19,12 @@ class VoxelGroup {
         this.voxels.push(voxel);
         this.checkAvailableMetabolites();
         this.countAverages();
+
+        // update ratios in the matrix view if the group is displayed
+        if (p5_view_R.xGroups.includes(this.group_idx) || p5_view_R.yGroups.includes(this.group_idx)) {
+            p5_view_R.countOverallRatios();
+            p5_view_R.countExpandedRatios();
+        }
     }
 
     removeVoxel(id) {
@@ -30,6 +37,12 @@ class VoxelGroup {
             this.checkAvailableMetabolites();
             this.countAverages();
             p5_view_R.updateScene();
+        }
+
+        // update ratios in the matrix view if the group is displayed
+        if (p5_view_R.xGroups.includes(this.group_idx) || p5_view_R.yGroups.includes(this.group_idx)) {
+            p5_view_R.countOverallRatios();
+            p5_view_R.countExpandedRatios();
         }
     }
 
@@ -234,36 +247,7 @@ class VoxelGroup {
     }
 
     sortVoxels() {
-        this.voxels.sort(function(a, b) {
-            if (a.highlighted && !b.highlighted) return -1;
-            if (b.highlighted && !a.highlighted) return 1;
-
-            if (a.vox_location == b.vox_location) {
-                if (a.patient == b.patient) {
-                    if (a.state == b.state) {
-
-                        var day_a = parseInt(a.time.split('.')[0]);
-                        var mon_a = parseInt(a.time.split('.')[1]);
-                        var year_a = parseInt(a.time.split('.')[2]);
-
-                        var day_b = parseInt(b.time.split('.')[0]);
-                        var mon_b = parseInt(b.time.split('.')[1]);
-                        var year_b = parseInt(b.time.split('.')[2]);
-
-                        var time_a = day_a + mon_a * 31 + year_a * 12 * 13;
-                        var time_b = day_b + mon_b * 31 + year_b * 12 * 13;
-
-                        return (time_a < time_b) ? -1 : (time_a > time_b) ? 1 : 0;
-                    } else {
-                        return (a.state < b.state) ? -1 : (a.state > b.state) ? 1 : 0;
-                    }
-                } else {
-                    return (a.patient < b.patient) ? -1 : (a.patient > b.patient) ? 1 : 0;
-                }
-            } else {
-                return (a.vox_location < b.vox_location) ? -1 : (a.vox_location > b.vox_location) ? 1 : 0;
-            }
-        });
+        this.voxels.sort((a, b) => compareVoxels(a, b, true));
     }
 };
 
@@ -459,33 +443,41 @@ function collapseAndSort(groups) {
     }
 
     // sort them
-    all_selected_voxels.sort(function(a, b) {
-        if (a.vox_location == b.vox_location) {
-            if (a.patient == b.patient) {
-                if (a.state == b.state) {
-
-                    var day_a = parseInt(a.time.split('.')[0]);
-                    var mon_a = parseInt(a.time.split('.')[1]);
-                    var year_a = parseInt(a.time.split('.')[2]);
-
-                    var day_b = parseInt(b.time.split('.')[0]);
-                    var mon_b = parseInt(b.time.split('.')[1]);
-                    var year_b = parseInt(b.time.split('.')[2]);
-
-                    var time_a = day_a + mon_a * 31 + year_a * 12 * 13;
-                    var time_b = day_b + mon_b * 31 + year_b * 12 * 13;
-
-                    return (time_a < time_b) ? -1 : (time_a > time_b) ? 1 : 0;
-                } else {
-                    return (a.state < b.state) ? -1 : (a.state > b.state) ? 1 : 0;
-                }
-            } else {
-                return (a.patient < b.patient) ? -1 : (a.patient > b.patient) ? 1 : 0;
-            }
-        } else {
-            return (a.vox_location < b.vox_location) ? -1 : (a.vox_location > b.vox_location) ? 1 : 0;
-        }
-    });
+    all_selected_voxels.sort((a, b) => compareVoxels(a, b, false));
 
     return all_selected_voxels;
+}
+
+function compareVoxels(a, b, highlight) {
+    if (highlight) {
+        if (a.highlighted && !b.highlighted) return -1;
+        if (b.highlighted && !a.highlighted) return 1;
+    }
+
+    if (a.vox_location == b.vox_location) {
+        if (a.patient == b.patient) {
+            if (a.state == b.state) {
+                
+                var day_a = parseInt(a.time.split('/')[0]);
+                var mon_a = parseInt(a.time.split('/')[1]);
+                var year_a = parseInt(a.time.split('/')[2]);
+                
+                var day_b = parseInt(b.time.split('/')[0]);
+                var mon_b = parseInt(b.time.split('/')[1]);
+                var year_b = parseInt(b.time.split('/')[2]);
+            
+
+                var time_a = day_a + (mon_a-1) * 31 + (year_a-1) * 12 * 31;
+                var time_b = day_b + (mon_b-1) * 31 + (year_b-1) * 12 * 31;
+
+                return (time_a < time_b) ? -1 : (time_a > time_b) ? 1 : 0;
+            } else {
+                return (a.state < b.state) ? -1 : (a.state > b.state) ? 1 : 0;
+            }
+        } else {
+            return (a.patient < b.patient) ? -1 : (a.patient > b.patient) ? 1 : 0;
+        }
+    } else {
+        return (a.vox_location < b.vox_location) ? -1 : (a.vox_location > b.vox_location) ? 1 : 0;
+    }
 }

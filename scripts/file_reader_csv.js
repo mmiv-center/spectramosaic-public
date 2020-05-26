@@ -6,7 +6,7 @@ var loaded_data = [];
 
 
 // callback function when the data is loaded
-function csvDataFileLoaded(evt, csv_results_file, patient_name, voxel_id, png_file) {
+function csvDataFileLoaded(evt, csv_results_file, patient_name, voxel_id, png_file, resolve) {
 
     var data_text = evt.target.result;
 
@@ -39,7 +39,7 @@ function csvDataFileLoaded(evt, csv_results_file, patient_name, voxel_id, png_fi
 
         var fileReader_data = new FileReader();
         fileReader_data.onloadend = function(evt) {
-            csvResultsFileLoaded(evt, png_file, patient_name, voxel_id, data_table);
+            csvResultsFileLoaded(evt, png_file, patient_name, voxel_id, data_table, resolve);
         };
 
         fileReader_data.readAsText(data_file);
@@ -47,7 +47,7 @@ function csvDataFileLoaded(evt, csv_results_file, patient_name, voxel_id, png_fi
 
 }
 
-function csvResultsFileLoaded(evt, png_file, patient_name, voxel_id, data_table) {
+function csvResultsFileLoaded(evt, png_file, patient_name, voxel_id, data_table, resolve) {
 
     var data_text = evt.target.result;
 
@@ -83,10 +83,10 @@ function csvResultsFileLoaded(evt, png_file, patient_name, voxel_id, data_table)
     png_file.data.file(function(image_file) {
         var fileReader_img = new FileReader();
         fileReader_img.onloadend = function(evt) {
-            pngLocationImageLoaded(evt, patient_name, voxel_id, data_table);
+            pngLocationImageLoaded(evt, patient_name, voxel_id, data_table, resolve);
         };
 
-        fileReader_img.readAsBinaryString(image_file);
+		fileReader_img.readAsDataURL(image_file); // read the image as a base-64 string
     });
 }
 
@@ -101,32 +101,22 @@ function csvHeaderFileLoaded(evt) {
     loaded_header = parsed;
 }
 
-function pngLocationImageLoaded(evt, patient_name, voxel_id, data_table) {
-    var image_bytes = evt.target.result;
+/**
+ * A callback function for a FileReader.
+ * 
+ * The image should be read as a base-64 string (see https://stackoverflow.com/questions/6150289/how-to-convert-image-into-base64-string-using-javascript) 
+ * using the FileReader.readAsDataURL method, it can then be loaded into a p5 Image object directly
+ */
+function pngLocationImageLoaded(evt, patient_name, voxel_id, data_table, resolve) {
+	var base64_string = evt.target.result;
 
-    var png_reader = new PNGReader(image_bytes);
+	var p5_img = p5_view_L.loadImage(base64_string);
 
-    png_reader.parse(function(err, png) {
-        if (err) throw err;
+    loaded_data.push({ patient: patient_name, voxel: voxel_id, data: data_table, image: p5_img });
 
-        // create a p5 image object out of the png
+    let percent_loaded = Math.floor((loaded_data.length / loaded_voxel_count) * 100);
+    console.log("Loaded " + voxel_id + ": progress " + percent_loaded);
+    p5_view_L.setMessage("Loading: " + voxel_id + " (" + percent_loaded + "%)");
 
-        var p5_img = p5_view_L.createImage(png.getWidth(), png.getHeight());
-        p5_img.loadPixels();
-
-        for (var i = 0; i < p5_img.width; i++) {
-            for (var j = 0; j < p5_img.height; j++) {
-                var pixel = png.getPixel(i, j);
-                p5_img.set(i, j, p5_view_L.color(pixel[0], pixel[1], pixel[2]));
-            }
-        }
-
-        p5_img.updatePixels();
-
-        loaded_data.push({ patient: patient_name, voxel: voxel_id, data: data_table, image: p5_img });
-
-        console.log("Loaded " + voxel_id + ": progress " + Math.floor((loaded_data.length / loaded_voxel_count) * 100));
-
-        finishLoading(); // check if all the data have been loaded
-    });
+    resolve();  // all loading for this voxel done -- call resolve() to update the Promise created in readVoxel
 }

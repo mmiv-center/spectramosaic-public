@@ -163,35 +163,37 @@ var group_table_comp = Vue.component('group-edit-table', {
         }
     },
     template: `
-        <table id="group-data-table">
-            <tr id="table-head">
-                <th>Select</th>
-                <th>Voxel ID</th>
-                <th>Patient</th>
-                <th>State</th>
-                <th>Time</th>
-                <th>TE</th>
-                <th>Location</th>
-            </tr>  
+        <div id="group-data-table">
+            <table id="group-data-table">
+                <tr id="table-head">
+                    <th>Select</th>
+                    <th>Voxel ID</th>
+                    <th>Patient</th>
+                    <th>State</th>
+                    <th>Time</th>
+                    <th>TE</th>
+                    <th>Location</th>
+                </tr>  
 
-            <!-- the :key attribute forces the element to redraw each time a variable is changed, see https://michaelnthiessen.com/force-re-render/ -->
+                <!-- the :key attribute forces the element to redraw each time a variable is changed, see https://michaelnthiessen.com/force-re-render/ -->
 
-            <tr v-for="voxel in all_voxels" class="tablerow" :id="voxel.vox_id" v-bind:class="{ 'table-highlighted': voxel.highlighted }">
-                <td> 
-                    <div class="form-check form-check-inline" :key="edited_group.name"> 
-                        <input v-on:click="checkboxClicked" v-if="edited_group.includesVoxel(voxel.vox_id)" type="checkbox" class="form-check-input group-checkbox" :id="voxel.vox_id" checked>
-                        <input v-on:click="checkboxClicked" v-else type="checkbox" class="form-check-input group-checkbox" :id="voxel.vox_id">
-                    </div>
-                </td>
-                <td>{{ voxel.vox_id }}</td>
-                <td>{{ voxel.patient }}</td>
-                <td v-if="voxel.state == 0">resting</td>
-                <td v-else>active</td>
-                <td>{{ voxel.time }}</td>
-                <td>{{ voxel.echotime }}</td>
-                <td>{{ voxel.vox_location }}</td>
-            </tr>
-        </table>
+                <tr v-for="voxel in all_voxels" class="tablerow" :id="voxel.vox_id" v-bind:class="{ 'table-highlighted': voxel.highlighted }">
+                    <td> 
+                        <div class="form-check form-check-inline" :key="voxel.vox_id + edited_group.name"> 
+                            <input v-on:click="checkboxClicked" v-if="edited_group.includesVoxel(voxel.vox_id)" type="checkbox" class="form-check-input group-checkbox" :id="voxel.vox_id" checked>
+                            <input v-on:click="checkboxClicked" v-else type="checkbox" class="form-check-input group-checkbox" :id="voxel.vox_id">
+                        </div>
+                    </td>
+                    <td>{{ voxel.vox_id }}</td>
+                    <td>{{ voxel.patient }}</td>
+                    <td v-if="voxel.state == 0">resting</td>
+                    <td v-else>active</td>
+                    <td>{{ voxel.time }}</td>
+                    <td>{{ voxel.echotime }}</td>
+                    <td>{{ voxel.vox_location }}</td>
+                </tr>
+            </table>
+        </div>
     `,
     methods: {
         checkboxClicked: function(evt) {
@@ -244,12 +246,18 @@ var group_edit_comp = Vue.component('group-edit-component', {
             return res;
         },
         all_voxels() {
+            var result = [];
+
             // a group containing all voxels is the first one that is not custom (just considering the case when a user has created a group before loading any data)
             for (var g of this.voxel_groups) {
-                if (!g.custom) return g.voxels;
+                if (g.group_idx == ALL_VOXELS_GROUP) {
+                    result = g.voxels;
+                    break;
+                } 
+                    
             }
 
-            return [];
+            return result;
         }
     },
     template: `
@@ -283,7 +291,7 @@ var group_edit_comp = Vue.component('group-edit-component', {
             </div>
         </div>
 
-        <div class="row justify-content-left">
+        <div class="row justify-content-left" id="group-edit-row">
             <div class="col" id="no-group-edit" v-if="edited_group == -1">
                 <br>
                 <p>No group selected</p>
@@ -293,7 +301,7 @@ var group_edit_comp = Vue.component('group-edit-component', {
                 <p class="p-group-name">Group: {{ edited_group_name }}</p> 
                 <p>No voxels available</p>
             </div>
-            <div class="col scroll-area" id="div-group-data-table" v-if="(edited_group != -1) && (all_voxels.length > 0)">
+            <div class="col" v-if="(edited_group != -1) && (all_voxels.length > 0)">
                 <br>
                 <p class="p-group-name">Group: {{ edited_group_name }}</p> 
 
@@ -307,6 +315,7 @@ var group_edit_comp = Vue.component('group-edit-component', {
         // handler for the create group button (shows the form for group creation)
         createGroup() {
             this.creating_group = true;
+            $("#group-edit-row").css('height', '68%');
         },
 
         // handler for the confirm button (checks validity of the name, creates the group, hides the form)
@@ -328,6 +337,7 @@ var group_edit_comp = Vue.component('group-edit-component', {
 
                 this.group_name_error = false;
                 this.creating_group = false;
+                $("#group-edit-row").css('height', '80%');
             }
         },
 
@@ -353,12 +363,17 @@ var app = new Vue({
     }, 
     computed: {        
         all_voxels() {
+            var result = [];
+
             // a group containing all voxels is the first one that is not custom (just considering the case when a user has created a group before loading any data)
             for (var g of this.voxel_groups) {
-                if (!g.custom) return g.voxels;
+                if (g.group_idx == ALL_VOXELS_GROUP) {
+                    result = g.voxels;
+                    break;
+                } 
             }
 
-            return [];
+            return result;
         }
     }
 });

@@ -20,6 +20,10 @@ body {
     height: 50px;
 }
 
+.col {
+    height: 100%;
+}
+
 .legend-text {
     margin-top: 12px;
     margin-bottom: 4px;
@@ -71,13 +75,29 @@ body {
     width: 12%;
 }
 
+#group-edit-row {
+    height: 85%;
+}
+
 .table-highlighted {
     /* background-color: lightgreen; */
     background-color: rgb(243, 158, 243);
 }
 
+div#group-data-table {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+div#right-data-table {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 #right_data_table {
-    margin-top: 5%;
+    margin-top: 1%;
     margin-left: 1%;
     width: 100%;
 }

@@ -37,6 +37,13 @@ let viewR_legend = function(p) {
         for (var i = 0; i < granularity; i++) {
             var heat_value = p.map(i, 0, granularity, heatmap_limits[0], heatmap_limits[1]);
             var y_pos = p.map(i, 0, granularity, y_start, y_end);
+            
+			var ratio_value;	// absolute value of the actual ratio
+			if (heat_value < 0) {
+				ratio_value = -1 / (heat_value - 1);
+			} else {
+				ratio_value = heat_value + 1;
+			}
 
             var c1 = p5_view_R.getHeatColor(heat_value, false); //red-blue heatmap 
 
@@ -47,7 +54,7 @@ let viewR_legend = function(p) {
 
             p.fill(0);
 
-            if (i == 0) {
+            /*if (i == 0) {
                 p.text("> " + heatmap_limits[0], p.width * 0.35, y_pos);
             } else if (i == granularity - 1) {
                 p.text("< " + (-1 / heatmap_limits[1]).toFixed(2), p.width * 0.35, y_pos);
@@ -56,12 +63,23 @@ let viewR_legend = function(p) {
             } else if (i == p.floor(granularity * 0.75)) {
                 var mid_val = p.map(i, granularity / 2, granularity - 1, heatmap_limits[1], 1);
                 p.text((-1 / mid_val).toFixed(2), p.width * 0.35, y_pos);
-
-            }
+            }*/            
+			
+			if (i == 0) {
+				p.text("> " + ratio_value.toFixed(1), p.width * 0.35, y_pos);
+			} else if (i == granularity-1) {
+				p.text("< " + ratio_value.toFixed(2), p.width * 0.35, y_pos);			
+			} else if (i == p.floor(granularity * 0.25)) {				
+				p.text(ratio_value.toFixed(2), p.width * 0.35, y_pos);
+			} else if (i == p.floor(granularity * 0.75)) {
+				//var mid_val = p.map(i, granularity/2, granularity-1, heatmap_limits[1], 1);
+				
+				p.text(ratio_value.toFixed(2), p.width * 0.35, y_pos);		
+			}
         }
 
         // draw the tick for 1 in the middle		
-        p.text(1, p.width * 0.2, (y_end + y_start) / 2);
+        p.text(1, p.width * 0.35, (y_end + y_start) / 2);
     }
 
     // -------------- draw the glyph legend --------------
