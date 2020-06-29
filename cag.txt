@@ -1,0 +1,8 @@
+submission title to Computers & Graphics: 
+Interactive Visual Exploration of Metabolite Ratios in MR Spectroscopy Studies
+
+Authors:
+Laura Garrison, Jakub Vasicek, Alexander R. Craven, Renate Gruner, Noeska N. Smit, Stefan Bruckner
+
+Operating system: 
+Windows 10, Mac OS 10.15.5
