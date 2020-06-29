@@ -6,3 +6,8 @@ Laura Garrison, Jakub Vasicek, Alexander R. Craven, Renate Gruner, Noeska N. Smi
 
 Operating system: 
 Windows 10, Mac OS 10.15.5
+
+Replication notes from datasets:
+Fig 3 can be replicated using sample_data/synthetic-case-all
+Fig 7 can be replicated using sample_data/giardiaFullMetab_diffTE
+Fig 8 can be replicated using sample_data/giardiaFullMetab_spatial
